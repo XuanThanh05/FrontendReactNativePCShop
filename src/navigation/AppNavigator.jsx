@@ -9,6 +9,7 @@ import CartScreen from '../screens/CartScreen';
 import StatisticsScreen from '../components/statistics/StatisticsScreen'; // ← thêm mới
 import HomeScreen    from '../screens/HomeScreen';    
 import CategoryScreen from '../screens/Categoryscreen';
+import AccountScreen  from '../screens/Accountscreen';
 // import ProductScreen from '../screens/ProductScreen'; 
 
 const Stack = createNativeStackNavigator();
@@ -88,7 +89,7 @@ const TabNavigator = () => (
     />
     <Tab.Screen
       name="Account"
-      component={HomeScreen}  // thay bằng AccountScreen sau
+      component={AccountScreen}  // thay bằng AccountScreen sau
       options={{
         tabBarIcon: ({ focused }) => (
           <TabIcon emoji="👤" label="Tài khoản" focused={focused} />
