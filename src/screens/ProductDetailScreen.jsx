@@ -39,7 +39,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
         <TouchableOpacity
           style={styles.headerCartBtn}
-          onPress={() => navigation.navigate('Cart')}
+          onPress={() => navigation.navigate('Main', { screen: 'Cart' })}
         >
           <Text style={styles.headerBtnIcon}>🛒</Text>
           {totalItems > 0 && (

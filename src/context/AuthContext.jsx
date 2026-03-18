@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
     const user = loginUser(phone, password);
     if (user) {
       setCurrentUser(user);
-      return { success: true, user };
+      return { success: true, user, isAdmin: user.role === 'admin' };
     }
     return { success: false, message: 'Số điện thoại hoặc mật khẩu không đúng' };
   };

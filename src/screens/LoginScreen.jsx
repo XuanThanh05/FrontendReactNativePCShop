@@ -30,7 +30,12 @@ const LoginScreen = ({ navigation }) => {
       const result = login(phone, password);
       setLoading(false);
       if (result.success) {
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        // Admin → Statistics, User → Main
+        if (result.isAdmin) {
+          navigation.reset({ index: 0, routes: [{ name: 'Statistics' }] });
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        }
       } else {
         Alert.alert('Đăng nhập thất bại', result.message);
       }

@@ -25,6 +25,19 @@ export const mockUsers = [
     points: 1200000,
     joinDate: '05/03/2024',
   },
+    {
+    id: 'admin',
+    fullName: 'Admin PCShop',
+    phone: '0000000000',
+    email: 'admin@pcshop.com',
+    password: 'admin123',
+    birthday: '',
+    isStudent: false,
+    memberRank: 'Admin',
+    points: 0,
+    joinDate: '01/01/2024',
+    role: 'admin',
+  }
 ];
 
 // Hàm kiểm tra đăng nhập
