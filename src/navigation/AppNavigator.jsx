@@ -8,6 +8,7 @@ import { CartProvider, useCart } from '../context/CartContext';
 import CartScreen from '../screens/CartScreen';
 import StatisticsScreen from '../components/statistics/StatisticsScreen'; // ← thêm mới
 import HomeScreen    from '../screens/HomeScreen';    
+import CategoryScreen from '../screens/Categoryscreen';
 // import ProductScreen from '../screens/ProductScreen'; 
 
 const Stack = createNativeStackNavigator();
@@ -71,7 +72,7 @@ const TabNavigator = () => (
     />
     <Tab.Screen
       name="Category"
-      component={HomeScreen}  // thay bằng CategoryScreen sau
+      component={CategoryScreen}  // thay bằng CategoryScreen sau
       options={{
         tabBarIcon: ({ focused }) => (
           <TabIcon emoji="📋" label="Danh mục" focused={focused} />
