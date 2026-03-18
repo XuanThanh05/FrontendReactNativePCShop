@@ -14,6 +14,8 @@ import AccountScreen  from '../screens/Accountscreen';
 import LoginScreen    from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import { AuthProvider }            from '../context/AuthContext';
+import ProductDetailScreen  from '../screens/ProductDetailScreen';
+import CheckoutScreen       from '../screens/CheckoutScreen';
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
@@ -102,30 +104,23 @@ const TabNavigator = () => (
 );
 const AppNavigator = () => {
   return (
-     <AuthProvider>
-    // CartProvider bọc ngoài để mọi màn hình dùng được giỏ hàng
-    <CartProvider>
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName="Main"  // ← đổi thành "Cart" khi test giỏ hàng
-          screenOptions={{ headerShown: false }}
-        >
-          {/* Màn hình thống kê admin */}
-          <Stack.Screen name="Statistics" component={StatisticsScreen} />
-
-       
- {/* Tab bar (Home, Category, Cart, Account) */}
-          <Stack.Screen name="Main" component={TabNavigator} />
-          {/* Thêm các màn hình khác vào đây sau */}
-          {/* <Stack.Screen name="Home"     component={HomeScreen} />    */}
-          {/* <Stack.Screen name="Product"  component={ProductScreen} /> */}
-          {/* <Stack.Screen name="Checkout" component={CheckoutScreen} />*/}
-            {/* Auth */}
-            <Stack.Screen name="Login"    component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </CartProvider>
+    <AuthProvider>
+      {/* CartProvider bọc ngoài để mọi màn hình dùng được giỏ hàng */}
+      <CartProvider>
+        <NavigationContainer>
+          <Stack.Navigator
+            initialRouteName="Main"
+            screenOptions={{ headerShown: false }}
+          >
+            <Stack.Screen name="Statistics" component={StatisticsScreen} />
+            <Stack.Screen name="Main"       component={TabNavigator} />
+            <Stack.Screen name="Login"      component={LoginScreen} />
+            <Stack.Screen name="Register"   component={RegisterScreen} />
+            { <Stack.Screen name="Product"  component={ProductDetailScreen } /> }
+            { <Stack.Screen name="Checkout" component={CheckoutScreen} /> }
+          </Stack.Navigator>
+        </NavigationContainer>
+      </CartProvider>
     </AuthProvider>
   );
 };
