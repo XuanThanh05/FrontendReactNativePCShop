@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { CartProvider } from '../context/CartContext';
 import CartScreen from '../screens/CartScreen';
+import StatisticsScreen from '../components/statistics/StatisticsScreen'; // ← thêm mới
 // import HomeScreen    from '../screens/HomeScreen';    
 // import ProductScreen from '../screens/ProductScreen'; 
 
@@ -16,10 +17,13 @@ const AppNavigator = () => {
     <CartProvider>
       <NavigationContainer>
         <Stack.Navigator
-          initialRouteName="Cart"
+          initialRouteName="Statistics"  // ← đổi thành "Cart" khi test giỏ hàng
           screenOptions={{ headerShown: false }}
         >
-          {/* Màn hình giỏ hàng — đặt initialRouteName="Cart" để test */}
+          {/* Màn hình thống kê admin */}
+          <Stack.Screen name="Statistics" component={StatisticsScreen} />
+
+          {/* Màn hình giỏ hàng */}
           <Stack.Screen name="Cart" component={CartScreen} />
 
           {/* Thêm các màn hình khác vào đây sau */}
