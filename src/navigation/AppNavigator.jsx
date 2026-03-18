@@ -11,7 +11,9 @@ import HomeScreen    from '../screens/HomeScreen';
 import CategoryScreen from '../screens/Categoryscreen';
 import AccountScreen  from '../screens/Accountscreen';
 // import ProductScreen from '../screens/ProductScreen'; 
-
+import LoginScreen    from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import { AuthProvider }            from '../context/AuthContext';
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
@@ -100,6 +102,7 @@ const TabNavigator = () => (
 );
 const AppNavigator = () => {
   return (
+     <AuthProvider>
     // CartProvider bọc ngoài để mọi màn hình dùng được giỏ hàng
     <CartProvider>
       <NavigationContainer>
@@ -117,9 +120,13 @@ const AppNavigator = () => {
           {/* <Stack.Screen name="Home"     component={HomeScreen} />    */}
           {/* <Stack.Screen name="Product"  component={ProductScreen} /> */}
           {/* <Stack.Screen name="Checkout" component={CheckoutScreen} />*/}
+            {/* Auth */}
+            <Stack.Screen name="Login"    component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>
+    </AuthProvider>
   );
 };
 
