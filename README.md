@@ -9,7 +9,19 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npm install
    ```
-
+   ```bash
+   npm install @react-navigation/native
+   ```
+   ```bash
+   npm install  @react-navigation/native-stack
+   ```
+   ```bash
+   npm install @react-navigation/bottom-tabs
+   ```
+   ```bash
+   npx expo install react-native-screens react-native-safe-area-context
+   ```
+    
 2. Start the app
 
    ```bash
