@@ -12,7 +12,7 @@ import {
 import { formatPrice, hotProducts } from '../constants/mockData';
 
 const UserStatisticsReport = ({ navigation }) => {
-  const [activeTab, setActiveTab] = useState('thisMonth'); // 'thisMonth' hoặc 'allTime'
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Tháng 3/2026 (0-indexed)
 
   const purchaseHistory = useMemo(() => {
     if (!hotProducts || hotProducts.length < 5) return [];
@@ -51,11 +51,16 @@ const UserStatisticsReport = ({ navigation }) => {
     ];
   }, [hotProducts]);
 
-  const filteredHistory = activeTab === 'thisMonth'
-    ? purchaseHistory.filter(item => item.date.includes('/03/2026'))
-    : purchaseHistory;
-  const totalSpent = filteredHistory.reduce((sum, item) => sum + item.price, 0);
-  const totalOrders = filteredHistory.length;
+  const monthString = `${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentDate.getFullYear()}`;
+  
+  const filteredHistory = purchaseHistory.filter(item => item.date.endsWith(monthString));
+  
+  // Tính tổng chi tiêu và tổng đơn của toàn bộ lịch sử (cố định)
+  const totalSpent = purchaseHistory.reduce((sum, item) => sum + item.price, 0);
+  const totalOrders = purchaseHistory.length;
+
+  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
 
   const renderProductItem = ({ item }) => (
     <View style={styles.productCard}>
@@ -95,28 +100,9 @@ const UserStatisticsReport = ({ navigation }) => {
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'thisMonth' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('thisMonth')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, activeTab === 'thisMonth' && styles.tabTextActive]}>Tháng 3/2026</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'allTime' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('allTime')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, activeTab === 'allTime' && styles.tabTextActive]}>Tất cả thời gian</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.overviewContainer}>
           <View style={[styles.card, styles.overviewCard]}>
-            <Text style={styles.cardLabel}>
-              {activeTab === 'thisMonth' ? 'Chi tiêu T3/2026' : 'Tổng chi tiêu tích lũy'}
-            </Text>
+            <Text style={styles.cardLabel}>Tổng chi tiêu</Text>
             <Text style={styles.cardValueHighlight}>{formatPrice(totalSpent)}</Text>
           </View>
           <View style={styles.overviewRow}>
@@ -132,9 +118,18 @@ const UserStatisticsReport = ({ navigation }) => {
         </View>
 
         <View style={styles.historyContainer}>
-          <Text style={styles.sectionTitle}>
-            {activeTab === 'thisMonth' ? 'Đơn hàng tháng này' : 'Toàn bộ đơn hàng'}
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Đơn hàng</Text>
+            <View style={styles.monthFilter}>
+              <TouchableOpacity onPress={prevMonth} style={styles.filterBtn} activeOpacity={0.7}>
+                <Text style={styles.filterBtnText}>{'<'}</Text>
+              </TouchableOpacity>
+              <Text style={styles.filterMonthText}>{monthString}</Text>
+              <TouchableOpacity onPress={nextMonth} style={styles.filterBtn} activeOpacity={0.7}>
+                <Text style={styles.filterBtnText}>{'>'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
           {filteredHistory.length > 0 ? (
             <View style={styles.cardList}>
               <FlatList
@@ -188,37 +183,6 @@ const styles = StyleSheet.create({
 
   container: {
     padding: 16
-  },
-
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 20,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  tabButtonActive: {
-    backgroundColor: '#D70018',
-    shadowColor: '#D70018',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#4B5563',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
   },
 
   overviewContainer: {
@@ -278,12 +242,40 @@ const styles = StyleSheet.create({
     color: '#D70018'
   },
 
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: '#1F2937',
-    marginBottom: 16,
     textTransform: 'uppercase'
+  },
+  monthFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  filterBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterBtnText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#D70018',
+  },
+  filterMonthText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginHorizontal: 8,
   },
   historyContainer: {
     marginBottom: 20
