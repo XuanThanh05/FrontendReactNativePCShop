@@ -61,7 +61,8 @@ const TabNavigator = () => (
         borderTopWidth: 1,
         borderTopColor: '#f0f0f0',
         height: 60,
-        paddingBottom: 6,
+        paddingBottom: 70,
+        paddingTop: 6,
       },
       tabBarShowLabel: false,
     }}
