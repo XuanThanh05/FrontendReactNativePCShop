@@ -16,6 +16,7 @@ import RegisterScreen from '../screens/RegisterScreen';
 import { AuthProvider }            from '../context/AuthContext';
 import ProductDetailScreen  from '../screens/ProductDetailScreen';
 import CheckoutScreen       from '../screens/CheckoutScreen';
+import UserStatisticsReport from '../screens/UserStatisticsReport';
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
@@ -118,6 +119,7 @@ const AppNavigator = () => {
             <Stack.Screen name="Register"   component={RegisterScreen} />
             { <Stack.Screen name="Product"  component={ProductDetailScreen } /> }
             { <Stack.Screen name="Checkout" component={CheckoutScreen} /> }
+            <Stack.Screen name="UserStatisticsReport" component={UserStatisticsReport} />
           </Stack.Navigator>
         </NavigationContainer>
       </CartProvider>

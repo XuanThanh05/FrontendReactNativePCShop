@@ -75,7 +75,7 @@ const AccountScreen = ({ navigation }) => {
           <MenuItem
             emoji="🧾"
             label="Lịch sử mua hàng"
-            onPress={() => navigation?.navigate('OrderHistory')}
+            onPress={() => navigation?.navigate('UserStatisticsReport')}
           />
         </MenuSection>
 
