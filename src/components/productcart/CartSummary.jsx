@@ -13,8 +13,8 @@ const CartSummary = ({ navigation }) => {
 
   const handleCheckout = () => {
     if (selectedCount === 0) return;
-    // navigation.navigate('Checkout');  ← mở khi có màn hình Checkout
-    alert('Chuyển sang màn hình thanh toán!');
+    navigation.navigate('Checkout'); 
+   
   };
 
   return (
