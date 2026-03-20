@@ -20,12 +20,14 @@ import {
   hotProducts,
 } from "../constants/mockData";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 
 const { width } = Dimensions.get("window");
 
 const HomeScreen = ({ navigation }) => {
   const [search, setSearch] = useState("");
   const { totalItems, addToCart } = useCart();
+  const { currentUser } = useAuth();
   const [activeBanner, setActiveBanner] = useState(0);
 
   const filteredProducts = hotProducts.filter(
@@ -40,9 +42,19 @@ const HomeScreen = ({ navigation }) => {
 
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Text style={styles.logo}>
-          PC<Text style={styles.logoAccent}>Shop</Text>
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.logo}>
+            PC<Text style={styles.logoAccent}>Shop</Text>
+          </Text>
+        </View>
+        {currentUser?.role === "admin" && (
+          <TouchableOpacity
+            style={styles.adminBtn}
+            onPress={() => navigation.navigate("Statistics")}
+          >
+            <Text style={styles.adminBtnText}>📊 Thống kê</Text>
+          </TouchableOpacity>
+        )}
         {/* <TouchableOpacity
           style={styles.cartBtn}
           onPress={() => navigation.navigate("Cart")}
@@ -248,9 +260,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#E53935",
     paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 12,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
   },
   logo: { fontSize: 22, fontWeight: "900", color: "#fff" },
   logoAccent: { color: "#FFD700" },
+  adminBtn: {
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  adminBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   cartBtn: { position: "relative", padding: 4 },
   cartIcon: { fontSize: 26 },
   badge: {

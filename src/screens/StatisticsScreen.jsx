@@ -8,7 +8,7 @@ import {
 import {
   summaryStats, revenueByMonth, orderStatusData,
   topProducts, warehouseReport, formatVND,
-} from '../../constants/statisticsMockData';
+} from '../constants/statisticsMockData';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BAR_AREA_WIDTH = SCREEN_WIDTH - 48 - 40; // padding + label
@@ -256,7 +256,7 @@ const WarehouseReport = ({ t }) => {
 // ============================================================
 // Main Screen
 // ============================================================
-export default function StatisticsScreen() {
+export default function StatisticsScreen({ navigation }) {
   const scheme = useColorScheme();
   const t = scheme === 'dark' ? darkTheme : lightTheme;
 
@@ -269,8 +269,16 @@ export default function StatisticsScreen() {
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: t.card, borderBottomColor: t.border }]}>
-        <Text style={[styles.headerTitle, { color: t.text }]}>📊 Thống Kê & Báo Cáo</Text>
-        <Text style={[styles.headerSub, { color: t.muted }]}>Tổng quan hoạt động kinh doanh</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={[styles.backIcon, { color: t.text }]}>‹</Text>
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={[styles.headerTitle, { color: t.text }]}>📊 Thống Kê & Báo Cáo</Text>
+          <Text style={[styles.headerSub, { color: t.muted }]}>Tổng quan hoạt động kinh doanh</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -294,7 +302,10 @@ export default function StatisticsScreen() {
 // ============================================================
 const styles = StyleSheet.create({
   root:        { flex: 1 },
-  header:      { paddingTop: 52, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1 },
+  header:      { paddingTop: 12, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn:     { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  backIcon:    { fontSize: 28, fontWeight: '700' },
+  headerContent: { flex: 1 },
   headerTitle: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   headerSub:   { fontSize: 12, marginTop: 2 },
   scroll:      { flex: 1 },

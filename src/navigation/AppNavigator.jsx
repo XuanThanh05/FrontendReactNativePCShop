@@ -5,7 +5,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import StatisticsScreen from "../components/statistics/StatisticsScreen"; // ← thêm mới
+import StatisticsScreen from "../screens/StatisticsScreen"; // ← thêm mới
 import { CartProvider, useCart } from "../context/CartContext";
 import AccountScreen from "../screens/Accountscreen";
 import CartScreen from "../screens/CartScreen";
