@@ -127,7 +127,7 @@ export const hotProducts = [
     discount: 9,
     image: 'https://tse4.mm.bing.net/th/id/OIP.PCd5tL3crwv_gW-4ohJVFwHaF7?rs=1&pid=ImgDetMain&o=7&rm=3',
     specs: 'i5-12450H | RTX 2050 | 8GB | 512GB',
-    stock: 7,
+    stock: 0,
     rating: 4.4,
     reviews: 95,
     isHot: false,
