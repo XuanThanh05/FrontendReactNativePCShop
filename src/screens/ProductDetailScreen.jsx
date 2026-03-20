@@ -2,13 +2,13 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-    Image,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
@@ -184,14 +184,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const [combos, setCombos] = useState([
     {
       id: 1,
-      name: `${product.name} (Sản phẩm chính)`,
-      price: product.price,
-      listPrice: product.originalPrice || product.price,
-      emoji: "💻",
-      checked: true,
-    },
-    {
-      id: 2,
       name: "Chuột gaming Logitech G305 Lightspeed Wireless",
       price: 790000,
       listPrice: 890000,
@@ -199,7 +191,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
       checked: true,
     },
     {
-      id: 3,
+      id: 2,
       name: "Tai nghe gaming Logitech G335 Wired",
       price: 990000,
       listPrice: 1190000,
@@ -228,22 +220,23 @@ const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const getComboSummary = () => {
-    let total = 0;
-    let retailTotal = 0;
+    // Tổng tiền luôn bao gồm sản phẩm chính hiện tại
+    let total = product.price;
+
+    // Tiết kiệm chỉ tính từ phụ kiện trong combo
+    let saving = 0;
 
     for (let i = 0; i < combos.length; i += 1) {
       const item = combos[i];
       if (item.checked) {
         total += item.price;
-        retailTotal += item.listPrice || item.price;
+        const itemListPrice = item.listPrice || item.price;
+        saving += Math.max(0, itemListPrice - item.price);
       }
     }
 
-    const saving = Math.max(0, retailTotal - total);
-
     return {
       total,
-      retailTotal,
       saving,
     };
   };
