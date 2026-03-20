@@ -228,7 +228,10 @@ const CategoryScreen = ({ navigation }) => {
             <View style={styles.sectionTitleCard}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>{detail.title}</Text>
-                <TouchableOpacity activeOpacity={0.8}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setSearch(detail.title)}
+                >
                   <Text style={styles.seeAll}>Xem tất cả &gt;</Text>
                 </TouchableOpacity>
               </View>
@@ -242,6 +245,7 @@ const CategoryScreen = ({ navigation }) => {
                     key={`${brand}-${index}`}
                     style={styles.chip}
                     activeOpacity={0.8}
+                    onPress={() => setSearch(brand)}
                   >
                     <Text style={styles.chipText}>{brand}</Text>
                   </TouchableOpacity>
@@ -272,6 +276,7 @@ const CategoryScreen = ({ navigation }) => {
                     key={`${item.label}-${index}`}
                     style={styles.hotChip}
                     activeOpacity={0.8}
+                    onPress={() => setSearch(item.label)}
                   >
                     <Text style={styles.hotChipText}>{item.label}</Text>
                     {item.tag !== "" && (
@@ -288,6 +293,51 @@ const CategoryScreen = ({ navigation }) => {
                     )}
                   </TouchableOpacity>
                 ))}
+              </View>
+            </View>
+
+            {/* Render Category Products to test */}
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionLabel}>Sản phẩm gợi ý</Text>
+              <View style={{ gap: 12 }}>
+                {hotProducts.filter((p) => p.category === activeId).length ===
+                0 ? (
+                  <Text
+                    style={{ fontSize: 13, color: "#888", fontStyle: "italic" }}
+                  >
+                    Chưa có sản phẩm demo cho danh mục này.
+                  </Text>
+                ) : (
+                  hotProducts
+                    .filter((p) => p.category === activeId)
+                    .slice(0, 5)
+                    .map((product) => (
+                      <TouchableOpacity
+                        key={product.id}
+                        style={styles.miniProductCard}
+                        activeOpacity={0.8}
+                        onPress={() =>
+                          navigation.navigate("Product", { product })
+                        }
+                      >
+                        <Image
+                          source={{ uri: product.image }}
+                          style={styles.miniProductImg}
+                        />
+                        <View style={styles.miniProductInfo}>
+                          <Text
+                            style={styles.miniProductName}
+                            numberOfLines={2}
+                          >
+                            {product.name}
+                          </Text>
+                          <Text style={styles.miniProductPrice}>
+                            {formatPrice(product.price)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                )}
               </View>
             </View>
 
@@ -581,5 +631,35 @@ const styles = StyleSheet.create({
     color: "#EB2D2D",
     fontSize: 12,
     fontWeight: "700",
+  },
+  miniProductCard: {
+    flexDirection: "row",
+    backgroundColor: "#F9F9F9",
+    borderRadius: 10,
+    padding: 8,
+    alignItems: "center",
+    gap: 12,
+  },
+  miniProductImg: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: "#FFF",
+  },
+  miniProductInfo: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  miniProductName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  miniProductPrice: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#EB2D2D",
   },
 });

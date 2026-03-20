@@ -15,6 +15,7 @@ import HomeScreen from "../screens/HomeScreen";
 import { AuthProvider } from "../context/AuthContext";
 import CheckoutScreen from "../screens/CheckoutScreen";
 import LoginScreen from "../screens/LoginScreen";
+import OrderSuccessScreen from "../screens/OrderSuccessScreen";
 import ProductDetailScreen from "../screens/ProductDetailScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import UserStatisticsReport from "../screens/UserStatisticsReport";
@@ -146,6 +147,7 @@ const AppNavigator = () => {
             <Stack.Screen name="Register" component={RegisterScreen} />
             {<Stack.Screen name="Product" component={ProductDetailScreen} />}
             {<Stack.Screen name="Checkout" component={CheckoutScreen} />}
+            <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} />
             <Stack.Screen
               name="UserStatisticsReport"
               component={UserStatisticsReport}

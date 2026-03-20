@@ -8,6 +8,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import CartItem from "../components/productcart/CartItem";
 import CartSummary from "../components/productcart/CartSummary";
 import { useCart } from "../context/CartContext";
@@ -30,7 +31,7 @@ const CartScreen = ({ navigation }) => {
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🛒</Text>
+          <Ionicons name="cart-outline" size={72} color="#ccc" style={{ marginBottom: 16 }} />
           <Text style={styles.emptyTitle}>Giỏ hàng trống</Text>
           <Text style={styles.emptySubtitle}>
             Thêm sản phẩm yêu thích vào giỏ hàng nhé!
@@ -56,7 +57,7 @@ const CartScreen = ({ navigation }) => {
           onPress={() => navigation?.goBack()}
           style={styles.backBtn}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Giỏ hàng ({totalItems})</Text>
         <TouchableOpacity onPress={clearCart} style={styles.clearBtn}>
@@ -70,7 +71,7 @@ const CartScreen = ({ navigation }) => {
           <View
             style={[styles.checkbox, allSelected && styles.checkboxChecked]}
           >
-            {allSelected && <Text style={styles.checkmark}>✓</Text>}
+            {allSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
           </View>
           <Text style={styles.selectAllText}>
             {allSelected ? "Bỏ chọn tất cả" : "Chọn tất cả"}
@@ -208,3 +209,4 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
+
