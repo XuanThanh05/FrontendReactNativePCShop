@@ -220,10 +220,10 @@ const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const getComboSummary = () => {
-    // Tổng tiền luôn bao gồm sản phẩm chính hiện tại
+    
     let total = product.price;
 
-    // Tiết kiệm chỉ tính từ phụ kiện trong combo
+    
     let saving = 0;
 
     for (let i = 0; i < combos.length; i += 1) {
