@@ -1,23 +1,23 @@
 // src/screens/HomeScreen.js
 import { useState } from "react";
 import {
-    Dimensions,
-    FlatList,
-    Image,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  FlatList,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-    banners,
-    categories,
-    formatPrice,
-    hotProducts,
+  banners,
+  categories,
+  formatPrice,
+  hotProducts,
 } from "../constants/mockData";
 import { useCart } from "../context/CartContext";
 
@@ -43,7 +43,7 @@ const HomeScreen = ({ navigation }) => {
         <Text style={styles.logo}>
           PC<Text style={styles.logoAccent}>Shop</Text>
         </Text>
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.cartBtn}
           onPress={() => navigation.navigate("Cart")}
         >
@@ -55,7 +55,7 @@ const HomeScreen = ({ navigation }) => {
               </Text>
             </View>
           )}
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       {/* ── Thanh tìm kiếm ─────────────────────────────────── */}

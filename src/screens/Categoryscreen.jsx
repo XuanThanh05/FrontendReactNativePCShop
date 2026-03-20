@@ -1,5 +1,9 @@
-// src/screens/CategoryScreen.js
-import { useState } from "react";
+import {
+    Ionicons,
+    MaterialCommunityIcons,
+    MaterialIcons,
+} from "@expo/vector-icons";
+import { useMemo, useState } from "react";
 import {
     Dimensions,
     FlatList,
@@ -19,90 +23,137 @@ import { useCart } from "../context/CartContext";
 
 const { width } = Dimensions.get("window");
 
+const PRODUCT_CARD_WIDTH = (width - 28) / 2;
+
+const CATEGORY_ICON_CONFIG = {
+  laptop: { lib: MaterialCommunityIcons, name: "laptop", color: "#58A8FF" },
+  cpu: { lib: MaterialCommunityIcons, name: "chip", color: "#B39DDB" },
+  ram: { lib: MaterialCommunityIcons, name: "memory", color: "#A4D65E" },
+  storage: { lib: MaterialCommunityIcons, name: "harddisk", color: "#8C7CC3" },
+  gpu: {
+    lib: MaterialCommunityIcons,
+    name: "expansion-card-variant",
+    color: "#5C6BC0",
+  },
+  mainboard: {
+    lib: MaterialCommunityIcons,
+    name: "developer-board",
+    color: "#C8C2DB",
+  },
+  psu: { lib: MaterialCommunityIcons, name: "power-plug", color: "#7B5E47" },
+  cooling: { lib: MaterialCommunityIcons, name: "fan", color: "#4FC3F7" },
+  monitor: { lib: MaterialIcons, name: "monitor", color: "#90A4AE" },
+  keyboard: { lib: MaterialCommunityIcons, name: "keyboard", color: "#607D8B" },
+  mouse: { lib: MaterialCommunityIcons, name: "mouse", color: "#78909C" },
+  headset: { lib: Ionicons, name: "headset", color: "#455A64" },
+};
+
 const CategoryScreen = ({ navigation }) => {
   const [activeId, setActiveId] = useState("laptop");
   const [search, setSearch] = useState("");
   const { addToCart } = useCart();
-  const detail = categoryDetail[activeId];
 
-  // Khi có từ khoá → hiện sản phẩm giống trang chủ
-  const searchResults = hotProducts.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.brand.toLowerCase().includes(search.toLowerCase()) ||
-      p.specs.toLowerCase().includes(search.toLowerCase()),
-  );
+  const detail =
+    categoryDetail[activeId] ?? categoryDetail[categoryList[0]?.id];
+  const isSearching = search.trim().length > 0;
 
-  const isSearching = search.length > 0;
+  const searchResults = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return [];
+
+    return hotProducts.filter(
+      (p) =>
+        p.name.toLowerCase().includes(keyword) ||
+        p.brand.toLowerCase().includes(keyword) ||
+        p.specs.toLowerCase().includes(keyword),
+    );
+  }, [search]);
+
+  const renderCategoryIcon = (catId) => {
+    const fallback = {
+      lib: MaterialCommunityIcons,
+      name: "shape-outline",
+      color: "#9E9E9E",
+    };
+    const config = CATEGORY_ICON_CONFIG[catId] || fallback;
+    const IconComponent = config.lib;
+
+    return <IconComponent name={config.name} size={24} color={config.color} />;
+  };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#E53935" />
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#EB2D2D" />
 
-      {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Danh mục</Text>
       </View>
 
-      {/* ── Thanh tìm kiếm ─────────────────────────────────── */}
-      <View style={styles.searchWrap}>
+      <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons
+            name="search"
+            size={18}
+            color="#222"
+            style={styles.searchIcon}
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="Bạn muốn mua gì hôm nay?"
-            placeholderTextColor="#aaa"
+            placeholderTextColor="#A3A3A3"
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
           />
           {isSearching && (
             <TouchableOpacity onPress={() => setSearch("")}>
-              <Text style={styles.clearSearch}>✕</Text>
+              <Ionicons name="close" size={18} color="#9A9A9A" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* ── Khi đang tìm kiếm: hiện grid sản phẩm ─────────── */}
       {isSearching ? (
-        <View style={styles.searchResultWrap}>
-          <Text style={styles.resultTitle}>
-            Kết quả cho "<Text style={styles.resultKeyword}>{search}</Text>" (
+        <View style={styles.searchResultContainer}>
+          <Text style={styles.searchResultTitle}>
+            Kết quả cho{" "}
+            <Text style={styles.searchKeyword}>&quot;{search}&quot;</Text> (
             {searchResults.length} sản phẩm)
           </Text>
 
           {searchResults.length === 0 ? (
-            <View style={styles.noResult}>
-              <Text style={styles.noResultIcon}>🔍</Text>
-              <Text style={styles.noResultText}>Không tìm thấy sản phẩm</Text>
+            <View style={styles.emptyWrap}>
+              <Ionicons name="search" size={46} color="#B6B6B6" />
+              <Text style={styles.emptyText}>Không tìm thấy sản phẩm</Text>
             </View>
           ) : (
             <FlatList
               data={searchResults}
               keyExtractor={(item) => item.id}
               numColumns={2}
-              columnWrapperStyle={styles.row}
-              contentContainerStyle={styles.productGrid}
               showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.productList}
+              columnWrapperStyle={styles.productRow}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.productCard}
+                  activeOpacity={0.9}
                   onPress={() =>
                     navigation.navigate("Product", { product: item })
                   }
-                  activeOpacity={0.85}
                 >
                   {item.discount > 0 && (
                     <View style={styles.discountBadge}>
                       <Text style={styles.discountText}>-{item.discount}%</Text>
                     </View>
                   )}
+
                   <Image
                     source={{ uri: item.image }}
                     style={styles.productImage}
                     resizeMode="cover"
                   />
+
                   <View style={styles.productInfo}>
                     <Text style={styles.productBrand}>{item.brand}</Text>
                     <Text style={styles.productName} numberOfLines={2}>
@@ -115,15 +166,15 @@ const CategoryScreen = ({ navigation }) => {
                       {formatPrice(item.price)}
                     </Text>
                     {item.originalPrice > item.price && (
-                      <Text style={styles.originalPrice}>
+                      <Text style={styles.productOriginalPrice}>
                         {formatPrice(item.originalPrice)}
                       </Text>
                     )}
                     <TouchableOpacity
-                      style={styles.addBtn}
+                      style={styles.addButton}
                       onPress={() => addToCart(item)}
                     >
-                      <Text style={styles.addBtnText}>+ Thêm vào giỏ</Text>
+                      <Text style={styles.addButtonText}>+ Thêm vào giỏ</Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -132,88 +183,115 @@ const CategoryScreen = ({ navigation }) => {
           )}
         </View>
       ) : (
-        /* ── Khi không tìm kiếm: hiện layout danh mục ─────── */
         <View style={styles.body}>
-          {/* Cột trái */}
           <ScrollView
-            style={styles.leftCol}
+            style={styles.leftColumn}
+            contentContainerStyle={styles.leftColumnContent}
             showsVerticalScrollIndicator={false}
           >
-            {categoryList.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[
-                  styles.catItem,
-                  activeId === cat.id && styles.catItemActive,
-                ]}
-                onPress={() => setActiveId(cat.id)}
-              >
-                {activeId === cat.id && <View style={styles.activeBar} />}
-                <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                <Text
+            {categoryList.map((cat) => {
+              const isActive = activeId === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  activeOpacity={0.9}
                   style={[
-                    styles.catName,
-                    activeId === cat.id && styles.catNameActive,
+                    styles.categoryItem,
+                    isActive && styles.categoryItemActive,
                   ]}
-                  numberOfLines={2}
+                  onPress={() => setActiveId(cat.id)}
                 >
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <View style={{ height: 30 }} />
+                  {isActive && <View style={styles.activeIndicator} />}
+                  <View style={styles.categoryIconWrap}>
+                    {renderCategoryIcon(cat.id)}
+                  </View>
+                  <Text
+                    numberOfLines={2}
+                    style={[
+                      styles.categoryName,
+                      isActive && styles.categoryNameActive,
+                    ]}
+                  >
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <View style={styles.bottomSpacer} />
           </ScrollView>
 
-          {/* Cột phải */}
           <ScrollView
-            style={styles.rightCol}
+            style={styles.rightColumn}
+            contentContainerStyle={styles.rightColumnContent}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{detail.title}</Text>
-              <TouchableOpacity>
-                <Text style={styles.seeAll}>Xem tất cả {">"}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.groupLabel}>Hãng sản xuất</Text>
-            <View style={styles.tagWrap}>
-              {detail.brands.map((brand, i) => (
-                <TouchableOpacity key={i} style={styles.tag}>
-                  <Text style={styles.tagText}>{brand}</Text>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>{detail.title}</Text>
+                <TouchableOpacity activeOpacity={0.8}>
+                  <Text style={styles.seeAll}>Xem tất cả &gt;</Text>
                 </TouchableOpacity>
-              ))}
+              </View>
             </View>
 
-            <Text style={styles.groupLabel}>Phân khúc giá</Text>
-            <View style={styles.tagWrap}>
-              {detail.priceRanges.map((range, i) => (
-                <TouchableOpacity key={i} style={styles.tag}>
-                  <Text style={styles.tagText}>{range.label}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionLabel}>Hãng sản xuất</Text>
+              <View style={styles.chipWrap}>
+                {detail.brands.map((brand, index) => (
+                  <TouchableOpacity
+                    key={`${brand}-${index}`}
+                    style={styles.chip}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.chipText}>{brand}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
-            <Text style={styles.groupLabel}>{detail.title} HOT ⚡</Text>
-            <View style={styles.hotWrap}>
-              {detail.hotItems.map((item, i) => (
-                <TouchableOpacity key={i} style={styles.hotTag}>
-                  <Text style={styles.hotTagText}>{item.label}</Text>
-                  {item.tag !== "" && (
-                    <View
-                      style={[
-                        styles.badge,
-                        item.tag === "HOT" ? styles.badgeHot : styles.badgeNew,
-                      ]}
-                    >
-                      <Text style={styles.badgeText}>{item.tag}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionLabel}>Phân khúc giá</Text>
+              <View style={styles.chipWrap}>
+                {detail.priceRanges.map((range, index) => (
+                  <TouchableOpacity
+                    key={`${range.label}-${index}`}
+                    style={styles.chip}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.chipText}>{range.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
-            <View style={{ height: 30 }} />
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionLabel}>{detail.title} HOT ⚡</Text>
+              <View style={styles.hotWrap}>
+                {detail.hotItems.map((item, index) => (
+                  <TouchableOpacity
+                    key={`${item.label}-${index}`}
+                    style={styles.hotChip}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.hotChipText}>{item.label}</Text>
+                    {item.tag !== "" && (
+                      <View
+                        style={[
+                          styles.hotBadge,
+                          item.tag === "HOT"
+                            ? styles.badgeHot
+                            : styles.badgeNew,
+                        ]}
+                      >
+                        <Text style={styles.hotBadgeText}>{item.tag}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.bottomSpacer} />
           </ScrollView>
         </View>
       )}
@@ -223,198 +301,285 @@ const CategoryScreen = ({ navigation }) => {
 
 export default CategoryScreen;
 
-const CARD_WIDTH = (width - 28) / 2;
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f5f5f5" },
+  safeArea: { flex: 1, backgroundColor: "#ECECEC" },
 
   header: {
-    backgroundColor: "#E53935",
+    backgroundColor: "#EB2D2D",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "800",
+  },
 
-  searchWrap: {
-    backgroundColor: "#E53935",
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+  searchContainer: {
+    backgroundColor: "#EB2D2D",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   searchBox: {
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 10,
     paddingHorizontal: 12,
-    height: 44,
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: "#1a1a1a" },
-  clearSearch: { fontSize: 16, color: "#aaa", paddingLeft: 8 },
+  searchIcon: { marginRight: 6 },
+  searchInput: {
+    flex: 1,
+    color: "#222",
+    fontSize: 15,
+  },
 
-  // ── Kết quả tìm kiếm ──────────────────────────────────────────
-  searchResultWrap: { flex: 1, backgroundColor: "#f5f5f5" },
-  resultTitle: {
+  body: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: "#ECECEC",
+  },
+
+  leftColumn: {
+    width: 1,
+    flexShrink: 0,
+    backgroundColor: "#F2F2F2",
+  },
+  leftColumnContent: { paddingBottom: 14 },
+  categoryItem: {
+    minHeight: 90,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F2F2F2",
+    borderBottomWidth: 1,
+    borderBottomColor: "#EAEAEA",
+    paddingHorizontal: 4,
+    position: "relative",
+  },
+  categoryItemActive: {
+    backgroundColor: "#FFFFFF",
+  },
+  activeIndicator: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: "#EB2D2D",
+  },
+  categoryIconWrap: { marginBottom: 6 },
+  categoryName: {
+    fontSize: 11,
+    color: "#666",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  categoryNameActive: {
+    color: "#111",
+    fontWeight: "700",
+  },
+
+  rightColumn: {
+    width: 250,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  rightColumnContent: { paddingBottom: 14 },
+
+  sectionTitleCard: {
+    backgroundColor: "#F8F8F8",
+    borderWidth: 1,
+    borderColor: "#EBEBEB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    color: "#111",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  seeAll: {
+    color: "#0066CC",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
+  sectionCard: {
+    backgroundColor: "#F8F8F8",
+    borderWidth: 1,
+    borderColor: "#EBEBEB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 14,
+    marginBottom: 10,
+  },
+  sectionLabel: {
+    color: "#111",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  chipText: {
+    color: "#333",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+
+  hotWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  hotChip: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  hotChipText: {
+    color: "#333",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  hotBadge: {
+    marginLeft: 8,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeHot: { backgroundColor: "#EB2D2D" },
+  badgeNew: { backgroundColor: "#43A047" },
+  hotBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  bottomSpacer: { height: 20 },
+
+  searchResultContainer: { flex: 1, backgroundColor: "#F5F5F5" },
+  searchResultTitle: {
     fontSize: 13,
     color: "#666",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  resultKeyword: { color: "#E53935", fontWeight: "700" },
+  searchKeyword: { color: "#EB2D2D", fontWeight: "700" },
 
-  row: { paddingHorizontal: 8, gap: 8, marginBottom: 8 },
-  productGrid: { paddingTop: 4, paddingBottom: 20 },
+  emptyWrap: {
+    alignItems: "center",
+    paddingTop: 60,
+  },
+  emptyText: {
+    marginTop: 10,
+    color: "#8B8B8B",
+    fontSize: 15,
+  },
 
+  productList: { paddingTop: 4, paddingBottom: 20 },
+  productRow: { paddingHorizontal: 8, gap: 8, marginBottom: 8 },
   productCard: {
-    width: CARD_WIDTH,
-    backgroundColor: "#fff",
+    width: PRODUCT_CARD_WIDTH,
+    backgroundColor: "#FFF",
     borderRadius: 14,
     overflow: "hidden",
+    elevation: 2,
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
     position: "relative",
   },
   discountBadge: {
     position: "absolute",
     top: 8,
     left: 8,
-    backgroundColor: "#E53935",
+    zIndex: 2,
+    backgroundColor: "#EB2D2D",
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    zIndex: 1,
   },
-  discountText: { color: "#fff", fontSize: 11, fontWeight: "800" },
-  productImage: { width: "100%", height: 120, backgroundColor: "#f0f0f0" },
+  discountText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  productImage: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "#F0F0F0",
+  },
   productInfo: { padding: 10 },
   productBrand: {
     fontSize: 10,
-    color: "#E53935",
+    color: "#EB2D2D",
     fontWeight: "700",
     textTransform: "uppercase",
   },
   productName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1a1a1a",
     marginTop: 3,
+    fontSize: 13,
     lineHeight: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
   },
-  productSpecs: { fontSize: 10, color: "#999", marginTop: 2 },
+  productSpecs: {
+    marginTop: 2,
+    fontSize: 10,
+    color: "#999",
+  },
   productPrice: {
+    marginTop: 6,
     fontSize: 14,
     fontWeight: "800",
-    color: "#E53935",
-    marginTop: 6,
+    color: "#EB2D2D",
   },
-  originalPrice: {
-    fontSize: 11,
-    color: "#bbb",
-    textDecorationLine: "line-through",
+  productOriginalPrice: {
     marginTop: 1,
+    fontSize: 11,
+    color: "#BBB",
+    textDecorationLine: "line-through",
   },
-  addBtn: {
+  addButton: {
+    marginTop: 8,
     backgroundColor: "#FFF0F0",
     borderRadius: 8,
     paddingVertical: 7,
     alignItems: "center",
-    marginTop: 8,
   },
-  addBtnText: { fontSize: 12, color: "#E53935", fontWeight: "700" },
-
-  noResult: { alignItems: "center", paddingVertical: 60 },
-  noResultIcon: { fontSize: 48, marginBottom: 12 },
-  noResultText: { fontSize: 15, color: "#888" },
-
-  // ── Layout danh mục ───────────────────────────────────────────
-  body: { flex: 1, flexDirection: "row" },
-
-  leftCol: {
-    width: 76,
-    backgroundColor: "#f0f0f0",
-    borderRightWidth: 1,
-    borderRightColor: "#e0e0e0",
-  },
-  catItem: {
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    position: "relative",
-    backgroundColor: "#f0f0f0",
-  },
-  catItemActive: { backgroundColor: "#fff" },
-  catEmoji: { fontSize: 26, marginBottom: 4 },
-  catName: {
-    fontSize: 10,
-    color: "#666",
-    textAlign: "center",
-    fontWeight: "600",
-    lineHeight: 14,
-  },
-  catNameActive: { color: "#E53935", fontWeight: "700" },
-  activeBar: {
-    position: "absolute",
-    left: 0,
-    top: 8,
-    bottom: 8,
-    width: 3,
-    backgroundColor: "#E53935",
-    borderRadius: 2,
-  },
-
-  rightCol: {
-    flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 14,
-    paddingTop: 14,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  sectionTitle: { fontSize: 17, fontWeight: "800", color: "#1a1a1a" },
-  seeAll: { fontSize: 13, color: "#E53935", fontWeight: "600" },
-  groupLabel: {
-    fontSize: 14,
+  addButtonText: {
+    color: "#EB2D2D",
+    fontSize: 12,
     fontWeight: "700",
-    color: "#333",
-    marginBottom: 10,
-    marginTop: 16,
   },
-  tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  tag: {
-    borderWidth: 1.5,
-    borderColor: "#e0e0e0",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: "#fff",
-  },
-  tagText: { fontSize: 13, color: "#333", fontWeight: "500" },
-  hotWrap: { gap: 8 },
-  hotTag: {
-    borderWidth: 1.5,
-    borderColor: "#e0e0e0",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  hotTagText: { fontSize: 13, color: "#1a1a1a", fontWeight: "600", flex: 1 },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  badgeHot: { backgroundColor: "#E53935" },
-  badgeNew: { backgroundColor: "#43A047" },
-  badgeText: { fontSize: 10, color: "#fff", fontWeight: "800" },
 });
