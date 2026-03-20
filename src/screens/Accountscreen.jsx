@@ -1,13 +1,14 @@
 // src/screens/AccountScreen.js
 import {
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../context/AuthContext";
 
 const MenuItem = ({ emoji, label, onPress }) => (
   <TouchableOpacity
@@ -31,6 +32,13 @@ const MenuSection = ({ title, children }) => (
 );
 
 const AccountScreen = ({ navigation }) => {
+  const { currentUser, isLoggedIn, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#E53935" />
@@ -48,73 +56,88 @@ const AccountScreen = ({ navigation }) => {
           </View>
           <View style={styles.welcomeInfo}>
             <Text style={styles.welcomeTitle}>
-              Chào mừng bạn đến với PCShop
+              {isLoggedIn
+                ? `Chào ${currentUser.fullName}`
+                : "Chào mừng bạn đến với PCShop"}
             </Text>
             <Text style={styles.welcomeSub}>
-              Đăng nhập để không bỏ lỡ các ưu đãi hấp dẫn.
+              {isLoggedIn
+                ? currentUser.phone
+                : "Đăng nhập để không bỏ lỡ các ưu đãi hấp dẫn."}
             </Text>
           </View>
         </View>
 
         {/* ── Nút đăng nhập / đăng ký ────────────────────── */}
-        <View style={styles.authRow}>
-          <TouchableOpacity
-            style={styles.loginBtn}
-            onPress={() => navigation?.navigate("Login")}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.loginBtnText}>Đăng nhập</Text>
-          </TouchableOpacity>
+        {!isLoggedIn && (
+          <View style={styles.authRow}>
+            <TouchableOpacity
+              style={styles.loginBtn}
+              onPress={() => navigation?.navigate("Login")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.loginBtnText}>Đăng nhập</Text>
+            </TouchableOpacity>
 
-          <Text style={styles.orText}>hoặc</Text>
+            <Text style={styles.orText}>hoặc</Text>
 
-          <TouchableOpacity
-            style={styles.registerBtn}
-            onPress={() => navigation?.navigate("Register")}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.registerBtnText}>Đăng ký</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={styles.registerBtn}
+              onPress={() => navigation?.navigate("Register")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.registerBtnText}>Đăng ký</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── Lịch sử ────────────────────────────────────── */}
         <MenuSection title="Lịch sử">
           <MenuItem
             emoji="🧾"
             label="Lịch sử mua hàng"
-            onPress={() => navigation?.navigate("UserStatisticsReport")}
+            onPress={() => {
+              if (isLoggedIn) {
+                navigation?.navigate("UserStatisticsReport");
+              } else {
+                navigation?.navigate("Login");
+              }
+            }}
           />
         </MenuSection>
 
-        {/* ── Ưu đãi ─────────────────────────────────────── */}
-        <MenuSection title="Ưu đãi">
-          <MenuItem
-            emoji="💎"
-            label="Hạng thành viên"
-            onPress={() => navigation?.navigate("MemberRank")}
-          />
-          <View style={styles.divider} />
-          <MenuItem
-            emoji="🏷️"
-            label="Mã giảm giá"
-            onPress={() => navigation?.navigate("Voucher")}
-          />
-        </MenuSection>
+        {isLoggedIn && (
+          <>
+            {/* ── Ưu đãi ─────────────────────────────────────── */}
+            <MenuSection title="Ưu đãi">
+              <MenuItem emoji="💎" label="Hạng thành viên" onPress={() => {}} />
+              <View style={styles.divider} />
+              <MenuItem emoji="🏷️" label="Mã giảm giá" onPress={() => {}} />
+            </MenuSection>
 
-        {/* ── Tài khoản ──────────────────────────────────── */}
-        <MenuSection title="Tài khoản">
-          <MenuItem
-            emoji="👤"
-            label="Thông tin cá nhân"
-            onPress={() => navigation?.navigate("Profile")}
-          />
-          <View style={styles.divider} />
-          <MenuItem
-            emoji="🔒"
-            label="Đổi mật khẩu"
-            onPress={() => navigation?.navigate("ChangePassword")}
-          />
-        </MenuSection>
+            {/* ── Tài khoản ──────────────────────────────────── */}
+            <MenuSection title="Tài khoản">
+              <MenuItem
+                emoji="👤"
+                label="Thông tin cá nhân"
+                onPress={() => {}}
+              />
+              <View style={styles.divider} />
+              <MenuItem emoji="🔒" label="Đổi mật khẩu" onPress={() => {}} />
+            </MenuSection>
+
+            {/* ── Đăng xuất ──────────────────────────────────── */}
+            <View style={{ marginHorizontal: 12, marginTop: 12 }}>
+              <TouchableOpacity
+                style={styles.logoutBtn}
+                onPress={handleLogout}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.logoutBtnText}>Đăng xuất</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -235,5 +258,20 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#f5f5f5",
     marginLeft: 52,
+  },
+
+  // Logout button
+  logoutBtn: {
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#E53935",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  logoutBtnText: {
+    color: "#E53935",
+    fontSize: 15,
+    fontWeight: "800",
   },
 });

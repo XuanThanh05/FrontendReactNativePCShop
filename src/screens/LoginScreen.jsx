@@ -1,16 +1,16 @@
 // src/screens/LoginScreen.js
 import { useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
@@ -34,8 +34,8 @@ const LoginScreen = ({ navigation }) => {
 
     setLoading(true);
     // Giả lập delay như gọi API
-    setTimeout(() => {
-      const result = login(phone, password);
+    setTimeout(async () => {
+      const result = await login(phone, password);
       setLoading(false);
       if (result.success) {
         // Admin → Statistics, User → Main
