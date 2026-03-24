@@ -1,19 +1,14 @@
-// src/context/AuthContext.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useState } from "react";
-import {
-    checkPhoneExists,
-    loginUser,
-    registerUser,
-} from "../constants/mockUsers";
+import { loginApi } from "../services/api";
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null); // null = chưa đăng nhập
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user data on startup
+  // Load user khi app mở
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -22,7 +17,7 @@ export const AuthProvider = ({ children }) => {
           setCurrentUser(JSON.parse(storedUser));
         }
       } catch (error) {
-        console.error("Failed to load user", error);
+        console.error("Load user error:", error);
       } finally {
         setLoading(false);
       }
@@ -30,35 +25,35 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
-  // ── Đăng nhập ───────────────────────────────────────────────
-  const login = async (phone, password) => {
-    const user = loginUser(phone, password);
-    if (user) {
+  // 🔐 LOGIN REAL API
+  const login = async (username, password) => {
+    try {
+      const res = await loginApi({ username, password });
+
+      const data = res.data;
+
+      const user = {
+        username: data.username,
+        role: data.role,
+        customerId: data.customerId,
+        token: data.accessToken,
+      };
+
       setCurrentUser(user);
       await AsyncStorage.setItem("currentUser", JSON.stringify(user));
-      return { success: true, user, isAdmin: user.role === "admin" };
+
+      return { success: true, user };
+    } catch (err) {
+      console.log("Login error:", err.response?.data || err.message);
+
+      return {
+        success: false,
+        message: err.response?.data?.message || "Đăng nhập thất bại",
+      };
     }
-    return {
-      success: false,
-      message: "Số điện thoại hoặc mật khẩu không đúng",
-    };
   };
 
-  // ── Đăng ký ─────────────────────────────────────────────────
-  const register = async (userData) => {
-    if (checkPhoneExists(userData.phone)) {
-      return { success: false, message: "Số điện thoại này đã được đăng ký" };
-    }
-    if (userData.password !== userData.confirmPassword) {
-      return { success: false, message: "Mật khẩu nhập lại không khớp" };
-    }
-    const newUser = registerUser(userData);
-    setCurrentUser(newUser);
-    await AsyncStorage.setItem("currentUser", JSON.stringify(newUser));
-    return { success: true, user: newUser };
-  };
-
-  // ── Đăng xuất ───────────────────────────────────────────────
+  // 🚪 LOGOUT
   const logout = async () => {
     setCurrentUser(null);
     await AsyncStorage.removeItem("currentUser");
@@ -68,7 +63,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ currentUser, isLoggedIn, login, register, logout, loading }}
+      value={{ currentUser, isLoggedIn, login, logout, loading }}
     >
       {!loading && children}
     </AuthContext.Provider>
