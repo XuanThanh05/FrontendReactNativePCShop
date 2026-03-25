@@ -1,9 +1,11 @@
 import axios from "axios";
 
-// ⚠️ QUAN TRỌNG:
-// Android Emulator → 10.0.2.2
+// ⚠️ QUAN TRỌNG:'
+// Đây là Backend, tuỳ thuộc vào cách mở app expo mà chỉnh baseURL cho phù hợp:
+// Android Emulator mặc định chơi → 10.0.2.2
 // iOS Simulator → localhost
-// Máy thật → IP máy tính (vd: 192.168.1.10)
+// Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10) 
+// (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
   baseURL: "http://192.168.x.x:8080/api",
