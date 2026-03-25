@@ -1,7 +1,3 @@
-// src/components/productcart/CartItem.js
-// Không thay đổi gì so với bản gốc — CartContext.normalizeItem đã map
-// product.imageUrl → item.image, product.description → item.specs
-// nên component này dùng item.image / item.specs là đúng.
 import { Ionicons } from "@expo/vector-icons";
 import {
   Alert,
@@ -15,8 +11,12 @@ import { formatPrice } from "../../constants/mockData";
 import { useCart } from "../../context/CartContext";
 
 const CartItem = ({ item }) => {
-  const { increaseQuantity, decreaseQuantity, removeFromCart, toggleSelect } =
-    useCart();
+  const {
+    increaseQuantity,
+    decreaseQuantity,
+    removeFromCartWithConfirm,   // ← Dùng cho icon thùng rác
+    toggleSelect,
+  } = useCart();
 
   const handleDecrease = () => {
     if (item.quantity === 1) {
@@ -28,7 +28,7 @@ const CartItem = ({ item }) => {
           {
             text: "Xóa",
             style: "destructive",
-            onPress: () => removeFromCart(item.id),
+            onPress: () => removeFromCartWithConfirm(item.id), // Dùng hàm có confirm
           },
         ],
       );
@@ -69,14 +69,16 @@ const CartItem = ({ item }) => {
       <View style={styles.info}>
         <View style={styles.topInfoRow}>
           <Text style={styles.brand}>{item.brand}</Text>
-          {/* Nút xóa */}
+          
+          {/* Nút xóa - icon thùng rác */}
           <TouchableOpacity
-            onPress={() => removeFromCart(item.id)}
+            onPress={() => removeFromCartWithConfirm(item.id)}   // ← ĐÃ SỬA Ở ĐÂY
             style={styles.deleteBtn}
           >
             <Ionicons name="trash-outline" size={18} color="#999" />
           </TouchableOpacity>
         </View>
+
         <Text style={styles.name} numberOfLines={2}>
           {item.name}
         </Text>

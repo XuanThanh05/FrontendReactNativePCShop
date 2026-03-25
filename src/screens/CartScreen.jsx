@@ -1,11 +1,12 @@
 // src/screens/CartScreen.js
 import {
-    FlatList,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,7 +26,43 @@ const CartScreen = ({ navigation }) => {
 
   const selectedCount = cartItems.filter((i) => i.selected).length;
 
-  // ── Giỏ hàng trống ──────────────────────────────────────────
+  // ── Xác nhận xóa các sản phẩm đã chọn ─────────────────────────────
+  const handleRemoveSelected = () => {
+    if (selectedCount === 0) return;
+
+    Alert.alert(
+      "Xóa sản phẩm đã chọn",
+      `Bạn có chắc muốn xóa ${selectedCount} sản phẩm đã chọn khỏi giỏ hàng?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: removeSelected,
+        },
+      ]
+    );
+  };
+
+  // ── Xác nhận xóa tất cả giỏ hàng ─────────────────────────────────
+  const handleClearCart = () => {
+    if (cartItems.length === 0) return;
+
+    Alert.alert(
+      "Xóa toàn bộ giỏ hàng",
+      "Bạn có chắc muốn xóa tất cả sản phẩm trong giỏ hàng không?\nHành động này không thể hoàn tác.",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa tất cả",
+          style: "destructive",
+          onPress: clearCart,
+        },
+      ]
+    );
+  };
+
+  // ── Giỏ hàng trống ───────────────────────────────────────────────
   if (cartItems.length === 0) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -51,7 +88,7 @@ const CartScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* ── Header ─────────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation?.goBack()}
@@ -60,12 +97,14 @@ const CartScreen = ({ navigation }) => {
           <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Giỏ hàng ({totalItems})</Text>
-        <TouchableOpacity onPress={clearCart} style={styles.clearBtn}>
+        
+        {/* Nút Xóa tất cả */}
+        <TouchableOpacity onPress={handleClearCart} style={styles.clearBtn}>
           <Text style={styles.clearText}>Xóa tất cả</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── Thanh chọn tất cả / xóa đã chọn ───────────────── */}
+      {/* ── Thanh chọn tất cả / xóa đã chọn ─────────────────────────── */}
       <View style={styles.toolbar}>
         <TouchableOpacity onPress={toggleSelectAll} style={styles.selectAllBtn}>
           <View
@@ -80,7 +119,7 @@ const CartScreen = ({ navigation }) => {
 
         {selectedCount > 0 && (
           <TouchableOpacity
-            onPress={removeSelected}
+            onPress={handleRemoveSelected}        // ← Đã thay bằng hàm có confirm
             style={styles.removeSelectedBtn}
           >
             <Text style={styles.removeSelectedText}>
@@ -90,7 +129,7 @@ const CartScreen = ({ navigation }) => {
         )}
       </View>
 
-      {/* ── Danh sách sản phẩm ─────────────────────────────── */}
+      {/* ── Danh sách sản phẩm ──────────────────────────────────────── */}
       <FlatList
         data={cartItems}
         keyExtractor={(item) => item.id}
@@ -99,7 +138,7 @@ const CartScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* ── Tổng tiền + thanh toán ─────────────────────────── */}
+      {/* ── Tổng tiền + thanh toán ──────────────────────────────────── */}
       <CartSummary navigation={navigation} />
     </SafeAreaView>
   );
@@ -125,7 +164,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f0f0f0",
   },
   backBtn: { padding: 4 },
-  backIcon: { fontSize: 22, color: "#1a1a1a" },
   headerTitle: {
     fontSize: 17,
     fontWeight: "800",
@@ -160,7 +198,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#E53935",
     borderColor: "#E53935",
   },
-  checkmark: { color: "#fff", fontSize: 13, fontWeight: "bold" },
   selectAllText: { fontSize: 14, color: "#333", fontWeight: "600" },
   removeSelectedBtn: {
     paddingHorizontal: 10,
@@ -183,7 +220,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 40,
   },
-  emptyIcon: { fontSize: 72, marginBottom: 16 },
   emptyTitle: {
     fontSize: 20,
     fontWeight: "800",
@@ -209,4 +245,3 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
-
