@@ -1,12 +1,15 @@
-// src/components/CartItem.js
+// src/components/productcart/CartItem.js
+// Không thay đổi gì so với bản gốc — CartContext.normalizeItem đã map
+// product.imageUrl → item.image, product.description → item.specs
+// nên component này dùng item.image / item.specs là đúng.
 import { Ionicons } from "@expo/vector-icons";
 import {
-    Alert,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { formatPrice } from "../../constants/mockData";
 import { useCart } from "../../context/CartContext";

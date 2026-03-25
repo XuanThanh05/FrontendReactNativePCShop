@@ -1,151 +1,189 @@
 // src/context/CartContext.js
-import React, { createContext, useContext, useReducer } from 'react';
-import { initialCartItems } from '../constants/mockData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { Platform, ToastAndroid } from 'react-native';
+import {
+  getCart,
+  addToCart as apiAddToCart,
+  updateCartItem,
+  removeCartItem,
+  clearCart as apiClearCart,
+} from '../services/api';
 
-// ── 1. Tạo Context ──────────────────────────────────────────────
-const CartContext = createContext();
-
-// ── 2. Reducer – xử lý các action ──────────────────────────────
-const cartReducer = (state, action) => {
-  switch (action.type) {
-
-    // Thêm sản phẩm vào giỏ
-    case 'ADD_TO_CART': {
-      const exists = state.items.find(item => item.id === action.payload.id);
-      if (exists) {
-        // Nếu đã có → tăng số lượng (không vượt stock)
-        return {
-          ...state,
-          items: state.items.map(item =>
-            item.id === action.payload.id
-              ? { ...item, quantity: Math.min(item.quantity + 1, item.stock) }
-              : item
-          ),
-        };
-      }
-      // Chưa có → thêm mới với quantity = 1
-      return {
-        ...state,
-        items: [...state.items, { ...action.payload, quantity: 1 }],
-      };
-    }
-
-    // Xóa sản phẩm khỏi giỏ
-    case 'REMOVE_FROM_CART':
-      return {
-        ...state,
-        items: state.items.filter(item => item.id !== action.payload),
-      };
-
-    // Tăng số lượng
-    case 'INCREASE_QUANTITY':
-      return {
-        ...state,
-        items: state.items.map(item =>
-          item.id === action.payload
-            ? { ...item, quantity: Math.min(item.quantity + 1, item.stock) }
-            : item
-        ),
-      };
-
-    // Giảm số lượng (về 0 thì tự xóa)
-    case 'DECREASE_QUANTITY':
-      return {
-        ...state,
-        items: state.items
-          .map(item =>
-            item.id === action.payload
-              ? { ...item, quantity: item.quantity - 1 }
-              : item
-          )
-          .filter(item => item.quantity > 0),
-      };
-
-    // Chọn / bỏ chọn 1 sản phẩm
-    case 'TOGGLE_SELECT':
-      return {
-        ...state,
-        items: state.items.map(item =>
-          item.id === action.payload
-            ? { ...item, selected: !item.selected }
-            : item
-        ),
-      };
-
-    // Chọn / bỏ chọn tất cả
-    case 'TOGGLE_SELECT_ALL': {
-      const allSelected = state.items.every(item => item.selected);
-      return {
-        ...state,
-        items: state.items.map(item => ({ ...item, selected: !allSelected })),
-      };
-    }
-
-    // Xóa những sản phẩm đã chọn
-    case 'REMOVE_SELECTED':
-      return {
-        ...state,
-        items: state.items.filter(item => !item.selected),
-      };
-
-    // Xóa toàn bộ giỏ hàng
-    case 'CLEAR_CART':
-      return { ...state, items: [] };
-
-    default:
-      return state;
+// Hiện toast trên Android, silent trên iOS (không dùng Alert để không chặn UX)
+const showToast = (message) => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
   }
+  // iOS: có thể tích hợp thư viện react-native-toast-message nếu cần
 };
 
-// ── 3. Provider ─────────────────────────────────────────────────
+const CartContext = createContext();
+
+// ── Normalize CartItemResponse (flat) → shape CartItem.js expect ─────────────
+// Backend CartItemResponse:
+//   { cartItemId, productId, productName, productImageUrl, productPrice,
+//     discount, quantity, stockQuantity, subtotal }
+// CartItem.js expects:
+//   { id, quantity, selected, name, brand, price, image, stock, specs }
+const normalizeItem = (item, selected = true) => ({
+  id:       item.cartItemId,         // cartItemId — dùng cho mọi API call
+  productId: item.productId,
+  quantity:  item.quantity,
+  selected,
+  name:  item.productName     ?? '',
+  brand: item.brand           ?? '',  // backend chưa expose → bổ sung vào CartItemResponse nếu cần
+  price: item.productPrice    ?? 0,
+  image: item.productImageUrl ?? '',
+  stock: item.stockQuantity   ?? 999,
+  specs: item.specs           ?? '',  // backend chưa expose → bổ sung vào CartItemResponse nếu cần
+  discount: item.discount     ?? 0,
+  subtotal:  item.subtotal    ?? 0,
+});
+
 export const CartProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(cartReducer, {
-    // Gán selected: true mặc định để test UI
-    items: initialCartItems.map(item => ({ ...item, selected: true })),
-  });
+  const [cartItems, setCartItems] = useState([]);
+  const [loading, setLoading]     = useState(false);
 
-  // ── Các action helper ───────────────────────────────────────
-  const addToCart        = (product)  => dispatch({ type: 'ADD_TO_CART',        payload: product });
-  const removeFromCart   = (id)       => dispatch({ type: 'REMOVE_FROM_CART',   payload: id });
-  const increaseQuantity = (id)       => dispatch({ type: 'INCREASE_QUANTITY',  payload: id });
-  const decreaseQuantity = (id)       => dispatch({ type: 'DECREASE_QUANTITY',  payload: id });
-  const toggleSelect     = (id)       => dispatch({ type: 'TOGGLE_SELECT',      payload: id });
-  const toggleSelectAll  = ()         => dispatch({ type: 'TOGGLE_SELECT_ALL' });
-  const removeSelected   = ()         => dispatch({ type: 'REMOVE_SELECTED' });
-  const clearCart        = ()         => dispatch({ type: 'CLEAR_CART' });
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // Backend CartResponse: { cartId, items: Page<CartItemResponse>, totalAmount, totalItems }
+  // items là Spring Page object: { content: [...], totalElements, ... }
+  const fetchCart = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res  = await getCart();
+      const data = res.data;
 
-  // ── Computed values ─────────────────────────────────────────
-  const totalItems     = state.items.reduce((sum, i) => sum + i.quantity, 0);
-  const selectedItems  = state.items.filter(i => i.selected);
-  const totalPrice     = selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const allSelected    = state.items.length > 0 && state.items.every(i => i.selected);
+      // Lấy mảng items từ Page object: data.items.content
+      // Fallback thêm các shape khác phòng backend thay đổi
+      let raw = [];
+      if (data?.items?.content && Array.isArray(data.items.content)) {
+        raw = data.items.content;               // ✅ CartResponse với Page
+      } else if (Array.isArray(data?.items)) {
+        raw = data.items;                       // fallback: items là mảng thẳng
+      } else if (Array.isArray(data?.cartItems)) {
+        raw = data.cartItems;
+      } else if (Array.isArray(data)) {
+        raw = data;
+      } else {
+        console.warn('fetchCart: unrecognized shape:', JSON.stringify(data));
+      }
+
+      setCartItems(prev => {
+        const selectedMap = Object.fromEntries(prev.map(i => [i.id, i.selected]));
+        return raw.map(item => normalizeItem(item, selectedMap[item.cartItemId] ?? true));
+      });
+    } catch (err) {
+      console.error('fetchCart error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchCart(); }, [fetchCart]);
+
+  // ── ADD — nhận product object từ HomeScreen ───────────────────────────────
+  const addToCart = async (product) => {
+    try {
+      await apiAddToCart({ productId: product.id, quantity: 1 });
+      await fetchCart();
+      showToast(`✓ Đã thêm "${product.name}" vào giỏ hàng`);
+    } catch (err) {
+      console.error('addToCart error:', err);
+      showToast('Thêm vào giỏ thất bại, thử lại sau');
+    }
+  };
+
+  // ── INCREASE ──────────────────────────────────────────────────────────────
+  const increaseQuantity = async (cartItemId) => {
+    const item = cartItems.find(i => i.id === cartItemId);
+    if (!item || item.quantity >= item.stock) return;
+    const newQty = item.quantity + 1;
+    setCartItems(prev => prev.map(i => i.id === cartItemId ? { ...i, quantity: newQty } : i));
+    try {
+      await updateCartItem(cartItemId, newQty);
+    } catch (err) {
+      console.error('increaseQuantity error:', err);
+      await fetchCart();
+    }
+  };
+
+  // ── DECREASE — CartItem.js xử lý Alert khi qty=1, chỉ gọi khi qty>1 ──────
+  const decreaseQuantity = async (cartItemId) => {
+    const item = cartItems.find(i => i.id === cartItemId);
+    if (!item || item.quantity <= 1) return;
+    const newQty = item.quantity - 1;
+    setCartItems(prev => prev.map(i => i.id === cartItemId ? { ...i, quantity: newQty } : i));
+    try {
+      await updateCartItem(cartItemId, newQty);
+    } catch (err) {
+      console.error('decreaseQuantity error:', err);
+      await fetchCart();
+    }
+  };
+
+  // ── REMOVE 1 ──────────────────────────────────────────────────────────────
+  const removeFromCart = async (cartItemId) => {
+    setCartItems(prev => prev.filter(i => i.id !== cartItemId));
+    try {
+      await removeCartItem(cartItemId);
+    } catch (err) {
+      console.error('removeFromCart error:', err);
+      await fetchCart();
+    }
+  };
+
+  // ── CLEAR ALL ─────────────────────────────────────────────────────────────
+  const clearCart = async () => {
+    setCartItems([]);
+    try {
+      await apiClearCart();
+    } catch (err) {
+      console.error('clearCart error:', err);
+      await fetchCart();
+    }
+  };
+
+  // ── REMOVE SELECTED ───────────────────────────────────────────────────────
+  const removeSelected = async () => {
+    const ids = cartItems.filter(i => i.selected).map(i => i.id);
+    if (!ids.length) return;
+    setCartItems(prev => prev.filter(i => !i.selected));
+    try {
+      await Promise.all(ids.map(id => removeCartItem(id)));
+    } catch (err) {
+      console.error('removeSelected error:', err);
+      await fetchCart();
+    }
+  };
+
+  // ── SELECT (local only, không cần API) ────────────────────────────────────
+  const toggleSelect = (cartItemId) =>
+    setCartItems(prev => prev.map(i => i.id === cartItemId ? { ...i, selected: !i.selected } : i));
+
+  const toggleSelectAll = () => {
+    const allSelected = cartItems.length > 0 && cartItems.every(i => i.selected);
+    setCartItems(prev => prev.map(i => ({ ...i, selected: !allSelected })));
+  };
+
+  // ── Computed ──────────────────────────────────────────────────────────────
+  const totalItems    = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const selectedItems = cartItems.filter(i => i.selected);
+  const totalPrice    = selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const allSelected   = cartItems.length > 0 && cartItems.every(i => i.selected);
 
   return (
-    <CartContext.Provider
-      value={{
-        cartItems: state.items,
-        totalItems,
-        totalPrice,
-        allSelected,
-        selectedItems,
-        addToCart,
-        removeFromCart,
-        increaseQuantity,
-        decreaseQuantity,
-        toggleSelect,
-        toggleSelectAll,
-        removeSelected,
-        clearCart,
-      }}
-    >
+    <CartContext.Provider value={{
+      cartItems, totalItems, totalPrice, allSelected, selectedItems, loading,
+      addToCart, removeFromCart, increaseQuantity, decreaseQuantity,
+      toggleSelect, toggleSelectAll, removeSelected, clearCart, fetchCart,
+    }}>
       {children}
     </CartContext.Provider>
   );
 };
 
-// ── 4. Custom hook để dùng ở bất kỳ đâu ────────────────────────
 export const useCart = () => {
-  const context = useContext(CartContext);
-  if (!context) throw new Error('useCart phải dùng trong CartProvider');
-  return context;
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error('useCart phải dùng trong CartProvider');
+  return ctx;
 };

@@ -1,4 +1,5 @@
-// src/components/CartSummary.js
+// src/components/productcart/CartSummary.js
+// Không thay đổi logic — totalPrice từ CartContext đã tính đúng từ API data
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { formatPrice } from "../../constants/mockData";
