@@ -21,7 +21,9 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npx expo install react-native-screens react-native-safe-area-context
    ```
-    
+   ```bash
+   npm install react-native-toast-message
+   ```
 2. Start the app
 
    ```bash
