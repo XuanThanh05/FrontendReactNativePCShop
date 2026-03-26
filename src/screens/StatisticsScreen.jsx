@@ -1,14 +1,16 @@
 // src/screens/StatisticsScreen.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, useColorScheme, StatusBar, Dimensions,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  summaryStats, revenueByMonth, orderStatusData,
-  topProducts, warehouseReport, formatVND,
-} from '../constants/statisticsMockData';
+  getSummaryStatistics, getOrderStatusDistribution,
+  getTopProducts, getWarehouseReport,
+} from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BAR_AREA_WIDTH = SCREEN_WIDTH - 48 - 40; // padding + label
@@ -48,40 +50,45 @@ const lightTheme = {
 // Sub-components
 // ============================================================
 
+/** Hàm format VND */
+const formatVND = (val) => {
+  if (!val) return "0 ₫";
+  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(val);
+};
+
 /** 4 card tổng quan */
-const SummaryCards = ({ t }) => {
+const SummaryCards = ({ stats, lowStockCount, t }) => {
   const cards = [
     {
       icon: '💰', label: 'Doanh Thu',
-      value: formatVND(summaryStats.totalRevenue),
-      growth: `▲ ${summaryStats.revenueGrowth}%`, color: t.blue,
+      value: formatVND(stats?.totalRevenue || 0),
+      color: '#3b82f6',
     },
     {
       icon: '🛒', label: 'Đơn Hàng',
-      value: summaryStats.totalOrders,
-      growth: `▲ ${summaryStats.orderGrowth}%`, color: t.green,
+      value: stats?.totalOrders || 0,
+      color: '#10b981',
     },
     {
       icon: '👥', label: 'Khách Hàng',
-      value: summaryStats.totalCustomers,
-      growth: `▲ ${summaryStats.customerGrowth}%`, color: t.purple,
+      value: stats?.totalCustomers || 0,
+      color: '#8b5cf6',
     },
     {
-      icon: '📦', label: 'Sắp Hết Hàng',
-      value: summaryStats.lowStockItems,
-      growth: '⚠ Cần nhập thêm', color: t.yellow,
+      icon: '⚠️', label: 'Hàng Tồn Kho Thấp',
+      value: lowStockCount || 0,
+      color: '#f59e0b',
     },
   ];
 
   return (
     <View style={styles.cardGrid}>
       {cards.map((c, i) => (
-        <View key={i} style={[styles.summaryCard, { backgroundColor: t.card, borderColor: t.border }]}>
+        <View key={i} style={[styles.summaryCard]}>
           <View style={[styles.cardAccent, { backgroundColor: c.color }]} />
           <Text style={styles.cardIcon}>{c.icon}</Text>
-          <Text style={[styles.cardLabel, { color: t.muted }]}>{c.label}</Text>
-          <Text style={[styles.cardValue, { color: t.text }]}>{c.value}</Text>
-          <Text style={[styles.cardGrowth, { color: c.color }]}>{c.growth}</Text>
+          <Text style={styles.cardLabel}>{c.label}</Text>
+          <Text style={styles.cardValue}>{c.value}</Text>
         </View>
       ))}
     </View>
@@ -93,11 +100,11 @@ const RevenueChart = ({ t }) => {
   const maxVal = Math.max(...revenueByMonth.map(d => d.revenue));
 
   return (
-    <View style={[styles.section, { backgroundColor: t.card, borderColor: t.border }]}>
+    <View style={[styles.section]}>
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: t.text }]}>Doanh Thu Theo Tháng</Text>
-        <View style={[styles.badge, { backgroundColor: t.blue + '25' }]}>
-          <Text style={[styles.badgeText, { color: t.blue }]}>2024</Text>
+        <Text style={[styles.sectionTitle]}>Doanh Thu Theo Tháng</Text>
+        <View style={[styles.badge, { backgroundColor: '#dbeafe' }]}>
+          <Text style={[styles.badgeText, { color: '#3b82f6' }]}>2024</Text>
         </View>
       </View>
 
@@ -107,7 +114,7 @@ const RevenueChart = ({ t }) => {
           const barHeight = Math.max(heightPercent * 120, 4);
           return (
             <View key={i} style={styles.barItem}>
-              <Text style={[styles.barValue, { color: t.muted }]}>
+              <Text style={[styles.barValue, { color: '#9ca3af' }]}>
                 {d.revenue >= 50 ? `${d.revenue}` : ''}
               </Text>
               <View style={styles.barWrap}>
@@ -116,85 +123,104 @@ const RevenueChart = ({ t }) => {
                     styles.bar,
                     {
                       height: barHeight,
-                      backgroundColor: i === revenueByMonth.length - 1 ? t.blue : t.blue + '70',
+                      backgroundColor: i === revenueByMonth.length - 1 ? '#3b82f6' : '#93c5fd',
                     },
                   ]}
                 />
               </View>
-              <Text style={[styles.barLabel, { color: t.muted }]}>{d.month}</Text>
+              <Text style={[styles.barLabel, { color: '#9ca3af' }]}>{d.month}</Text>
             </View>
           );
         })}
       </View>
 
       <View style={styles.chartNote}>
-        <Text style={[styles.chartNoteText, { color: t.muted }]}>Đơn vị: triệu đồng</Text>
+        <Text style={[styles.chartNoteText, { color: '#9ca3af' }]}>Đơn vị: triệu đồng</Text>
       </View>
     </View>
   );
 };
 
 /** Trạng thái đơn hàng — horizontal bar */
-const OrderStatus = ({ t }) => (
-  <View style={[styles.section, { backgroundColor: t.card, borderColor: t.border }]}>
-    <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, { color: t.text }]}>Trạng Thái Đơn Hàng</Text>
-      <View style={[styles.badge, { backgroundColor: t.green + '25' }]}>
-        <Text style={[styles.badgeText, { color: t.green }]}>342 đơn</Text>
-      </View>
-    </View>
+const OrderStatus = ({ orderStatusData, t }) => {
+  const statusColors = {
+    PAID: { color: '#10b981' },
+    PENDING: { color: '#f59e0b' },
+    PROCESSING: { color: '#3b82f6' },
+    SHIPPING: { color: '#8b5cf6' },
+    COMPLETED: { color: '#06b6d4' },
+    CANCELLED: { color: '#ef4444' },
+  };
 
-    {orderStatusData.map((item, i) => (
-      <View key={i} style={styles.orderRow}>
-        <View style={styles.orderLeft}>
-          <View style={[styles.dot, { backgroundColor: item.color }]} />
-          <Text style={[styles.orderName, { color: t.text }]}>{item.name}</Text>
+  const totalOrders = orderStatusData.reduce((sum, item) => sum + item.count, 0);
+
+  return (
+    <View style={[styles.section]}>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle]}>Trạng Thái Đơn Hàng</Text>
+        <View style={[styles.badge, { backgroundColor: '#d1fae5' }]}>
+          <Text style={[styles.badgeText, { color: '#10b981' }]}>{totalOrders} đơn</Text>
         </View>
-        <View style={styles.orderBarWrap}>
-          <View style={[styles.orderBarBg, { backgroundColor: t.card2 }]}>
-            <View
-              style={[
-                styles.orderBarFill,
-                { width: `${item.percent}%`, backgroundColor: item.color },
-              ]}
-            />
-          </View>
-        </View>
-        <Text style={[styles.orderCount, { color: t.text }]}>{item.value}</Text>
       </View>
-    ))}
-  </View>
-);
+
+      {orderStatusData.map((item, i) => {
+        const config = statusColors[item.status] || { color: '#6b7280' };
+        const percent = totalOrders > 0 ? (item.count / totalOrders) * 100 : 0;
+
+        return (
+          <View key={i} style={styles.orderRow}>
+            <View style={styles.orderLeft}>
+              <View style={[styles.dot, { backgroundColor: config.color }]} />
+              <Text style={[styles.orderName, { color: '#0f172a' }]}>{item.status}</Text>
+            </View>
+            <View style={styles.orderBarWrap}>
+              <View style={[styles.orderBarBg, { backgroundColor: '#f3f4f6' }]}>
+                <View
+                  style={[
+                    styles.orderBarFill,
+                    { width: `${percent}%`, backgroundColor: config.color },
+                  ]}
+                />
+              </View>
+            </View>
+            <Text style={[styles.orderCount, { color: '#0f172a' }]}>{item.count}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+};
 
 /** Top sản phẩm bán chạy */
-const TopProducts = ({ t }) => {
-  const maxSold = Math.max(...topProducts.map(p => p.sold));
+const TopProducts = ({ topProducts, t }) => {
+  const maxSold = topProducts.length > 0 ? Math.max(...topProducts.map(p => p.quantity)) : 1;
+
   return (
-    <View style={[styles.section, { backgroundColor: t.card, borderColor: t.border }]}>
+    <View style={[styles.section]}>
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: t.text }]}>Sản Phẩm Bán Chạy</Text>
-        <View style={[styles.badge, { backgroundColor: t.purple + '25' }]}>
-          <Text style={[styles.badgeText, { color: t.purple }]}>Top {topProducts.length}</Text>
+        <Text style={[styles.sectionTitle]}>Sản Phẩm Bán Chạy</Text>
+        <View style={[styles.badge, { backgroundColor: '#ede9fe' }]}>
+          <Text style={[styles.badgeText, { color: '#8b5cf6' }]}>Top {topProducts.length}</Text>
         </View>
       </View>
 
       {topProducts.map((p, i) => (
         <View key={i} style={styles.productRow}>
-          <Text style={[styles.productRank, { color: t.muted }]}>#{i + 1}</Text>
+          <Text style={[styles.productRank, { color: '#9ca3af' }]}>#{i + 1}</Text>
           <View style={styles.productInfo}>
-            <Text style={[styles.productName, { color: t.text }]} numberOfLines={1}>
+            <Text style={[styles.productName, { color: '#0f172a' }]} numberOfLines={1}>
               {p.name}
             </Text>
-            <View style={[styles.productBarBg, { backgroundColor: t.card2 }]}>
+            <View style={[styles.productBarBg, { backgroundColor: '#f3f4f6' }]}>
               <View
                 style={[
                   styles.productBarFill,
-                  { width: `${(p.sold / maxSold) * 100}%` },
+                  { width: `${(p.quantity / maxSold) * 100}%` },
                 ]}
               />
             </View>
           </View>
-          <Text style={[styles.productSold, { color: t.blue }]}>{p.sold}</Text>
+          <Text style={[styles.productSold, { color: '#3b82f6' }]}>{p.quantity}</Text>
         </View>
       ))}
     </View>
@@ -202,49 +228,85 @@ const TopProducts = ({ t }) => {
 };
 
 /** Báo cáo kho hàng */
-const WarehouseReport = ({ t }) => {
-  const statusConfig = {
-    ok:     { label: 'Còn hàng', color: t.green,  bg: t.green  + '20' },
-    warn:   { label: 'Sắp hết',  color: t.yellow, bg: t.yellow + '20' },
-    danger: { label: 'Hết hàng', color: t.red,    bg: t.red    + '20' },
+const WarehouseReport = ({ warehouseData, sortColumn, sortDirection, onSort, t }) => {
+  const statusConfig = (stock) => {
+    if (stock === 0) {
+      return { label: 'Hết hàng', color: '#ef4444', bg: '#fee2e2' };
+    } else if (stock < 10) {
+      return { label: 'Sắp hết', color: '#f59e0b', bg: '#fef3c7' };
+    } else {
+      return { label: 'Còn hàng', color: '#10b981', bg: '#d1fae5' };
+    }
   };
 
-  const needRestock = warehouseReport.filter(i => i.status !== 'ok').length;
+  const lowStockCount = warehouseData.filter(i => i.stockQuantity > 0 && i.stockQuantity < 10).length;
+  const outOfStockCount = warehouseData.filter(i => i.stockQuantity === 0).length;
+
+  const getSortArrow = (col) => {
+    if (sortColumn !== col) return '';
+    // For text columns (name, category): asc=A→Z show ↓, desc=Z→A show ↑
+    // For number columns (stockQuantity): asc show ↑, desc show ↓
+    if (col === 'name' || col === 'category') {
+      return sortDirection === 'asc' ? '↓' : '↑';
+    }
+    return sortDirection === 'asc' ? '↑' : '↓';
+  };
 
   return (
-    <View style={[styles.section, { backgroundColor: t.card, borderColor: t.border }]}>
+    <View style={[styles.section]}>
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: t.text }]}>📦 Báo Cáo Kho Hàng</Text>
-        <View style={[styles.badge, { backgroundColor: t.yellow + '25' }]}>
-          <Text style={[styles.badgeText, { color: t.yellow }]}>{needRestock} cần nhập</Text>
+        <Text style={[styles.sectionTitle]}>📦 Báo Cáo Kho Hàng</Text>
+        <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
+          <Text style={[styles.badgeText, { color: '#f59e0b' }]}>{lowStockCount + outOfStockCount} cần nhập</Text>
         </View>
       </View>
 
-      {warehouseReport.map((item, i) => {
-        const cfg = statusConfig[item.status];
+      {/* Table Header với Sort */}
+      <View style={[styles.tableHeader]}>
+        <TouchableOpacity onPress={() => onSort('name')} style={{ flex: 1 }}>
+          <Text style={[styles.tableHeaderText, { color: sortColumn === 'name' ? '#3b82f6' : '#6b7280' }]}>
+            Tên {getSortArrow('name')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onSort('category')} style={{ width: 80, marginLeft: 12 }}>
+          <Text style={[styles.tableHeaderText, { color: sortColumn === 'category' ? '#3b82f6' : '#6b7280' }]}>
+            Danh Mục {getSortArrow('category')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onSort('stockQuantity')} style={{ width: 60, marginLeft: 16, alignItems: 'flex-start' }}>
+          <Text style={[styles.tableHeaderText, { color: sortColumn === 'stockQuantity' ? '#3b82f6' : '#6b7280' }]}>
+            Tồn Kho {getSortArrow('stockQuantity')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Table Rows */}
+      {warehouseData.map((item, i) => {
+        const cfg = statusConfig(item.stockQuantity);
         return (
           <View
             key={item.id}
             style={[
               styles.warehouseRow,
-              i < warehouseReport.length - 1 && { borderBottomWidth: 1, borderBottomColor: t.border },
+              i < warehouseData.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
             ]}
           >
-            <View style={styles.warehouseLeft}>
-              <Text style={[styles.warehouseId, { color: t.muted }]}>
-                #{String(item.id).padStart(2, '0')}
-              </Text>
-              <Text style={[styles.warehouseName, { color: t.text }]} numberOfLines={1}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.warehouseName]} numberOfLines={1}>
                 {item.name}
               </Text>
             </View>
-            <View style={styles.warehouseRight}>
-              <Text style={[styles.warehouseStock, { color: cfg.color }]}>
-                {item.stock}/{item.minStock}
-              </Text>
-              <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-                <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+            <View style={{ width: 80, marginLeft: 12 }}>
+              <View style={[styles.categoryBadge]}>
+                <Text style={[styles.categoryBadgeText]} numberOfLines={1}>
+                  {item.category}
+                </Text>
               </View>
+            </View>
+            <View style={{ width: 60, marginLeft: 16, alignItems: 'flex-start' }}>
+              <Text style={[styles.warehouseStock, { color: cfg.color }]}>
+                {item.stockQuantity}
+              </Text>
             </View>
           </View>
         );
@@ -259,25 +321,165 @@ const WarehouseReport = ({ t }) => {
 export default function StatisticsScreen({ navigation }) {
   const scheme = useColorScheme();
   const t = scheme === 'dark' ? darkTheme : lightTheme;
+  const insets = useSafeAreaInsets();
+
+  // State
+  const [stats, setStats] = useState(null);
+  const [orderStatusData, setOrderStatusData] = useState([]);
+  const [topProductsData, setTopProductsData] = useState([]);
+  const [warehouseData, setWarehouseData] = useState([]);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Sort state
+  const [sortColumn, setSortColumn] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
+
+  // Fetch data từ API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [summaryRes, orderStatusRes, topProductsRes, warehouseRes] = await Promise.all([
+          getSummaryStatistics(),
+          getOrderStatusDistribution(),
+          getTopProducts(),
+          getWarehouseReport(),
+        ]);
+
+        // Set summary stats
+        setStats({
+          totalRevenue: summaryRes.data?.totalRevenue || 0,
+          totalOrders: summaryRes.data?.totalOrders || 0,
+          totalCustomers: summaryRes.data?.totalCustomers || 0,
+        });
+
+        // Set order status
+        setOrderStatusData(orderStatusRes.data || []);
+
+        // Set top products
+        setTopProductsData(topProductsRes.data || []);
+
+        // Set warehouse + calculate low stock
+        const warehouse = warehouseRes.data || [];
+        setWarehouseData(warehouse);
+        
+        const lowStock = warehouse.filter(
+          item => item.stockQuantity > 0 && item.stockQuantity < 10
+        ).length;
+        setLowStockCount(lowStock);
+
+      } catch (err) {
+        console.error('Error fetching statistics:', err);
+        setError(err.message || 'Không thể tải dữ liệu');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Hàm sort warehouse data
+  const getSortedWarehouse = () => {
+    if (!warehouseData.length) return [];
+
+    const sorted = [...warehouseData].sort((a, b) => {
+      let compareA, compareB;
+
+      switch (sortColumn) {
+        case 'name':
+          compareA = a.name?.toLowerCase() || '';
+          compareB = b.name?.toLowerCase() || '';
+          break;
+        case 'category':
+          compareA = a.category?.toLowerCase() || '';
+          compareB = b.category?.toLowerCase() || '';
+          break;
+        case 'stockQuantity':
+          compareA = a.stockQuantity || 0;
+          compareB = b.stockQuantity || 0;
+          break;
+        default:
+          compareA = a.name?.toLowerCase() || '';
+          compareB = b.name?.toLowerCase() || '';
+      }
+
+      if (compareA < compareB) return sortDirection === 'asc' ? -1 : 1;
+      if (compareA > compareB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  };
+
+  // Hàm xử lý sort
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Loading
+  if (loading) {
+    return (
+      <View style={[styles.root, { backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text style={[{ color: '#0f172a', marginTop: 12 }]}>Đang tải...</Text>
+      </View>
+    );
+  }
+
+  // Error
+  if (error) {
+    return (
+      <View style={[styles.root, { backgroundColor: '#f5f5f5' }]}>
+        <View style={[styles.header, { backgroundColor: '#E53935' }]}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={[styles.backIcon]}>‹</Text>
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={[styles.headerTitle]}>📊 Thống Kê & Báo Cáo</Text>
+          </View>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={[{ color: '#ef4444', fontSize: 14, textAlign: 'center' }]}>
+            Lỗi: {error}
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{ marginTop: 20, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#3b82f6', borderRadius: 8 }}
+          >
+            <Text style={[{ color: '#fff' }]}>Quay lại</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.root, { backgroundColor: t.bg }]}>
-      <StatusBar
-        barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'}
-        backgroundColor={t.bg}
-      />
+    <SafeAreaView style={[styles.root, { backgroundColor: '#f5f5f5' }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#E53935" />
 
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: t.card, borderBottomColor: t.border }]}>
+      <View style={[styles.header, { backgroundColor: '#E53935', paddingTop: 8 }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
         >
-          <Text style={[styles.backIcon, { color: t.text }]}>‹</Text>
+          <Text style={[styles.backIcon]}>‹</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={[styles.headerTitle, { color: t.text }]}>📊 Thống Kê & Báo Cáo</Text>
-          <Text style={[styles.headerSub, { color: t.muted }]}>Tổng quan hoạt động kinh doanh</Text>
+          <Text style={[styles.headerTitle]}>📊 Thống Kê & Báo Cáo</Text>
         </View>
       </View>
 
@@ -286,14 +488,19 @@ export default function StatisticsScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <SummaryCards t={t} />
-        <RevenueChart t={t} />
-        <OrderStatus t={t} />
-        <TopProducts t={t} />
-        <WarehouseReport t={t} />
+        <SummaryCards t={t} stats={stats} lowStockCount={lowStockCount} />
+        <OrderStatus t={t} orderStatusData={orderStatusData} />
+        <TopProducts t={t} topProducts={topProductsData} />
+        <WarehouseReport 
+          t={t} 
+          warehouseData={getSortedWarehouse()} 
+          sortColumn={sortColumn}
+          sortDirection={sortDirection}
+          onSort={handleSort}
+        />
         <View style={{ height: 32 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -301,15 +508,15 @@ export default function StatisticsScreen({ navigation }) {
 // Styles
 // ============================================================
 const styles = StyleSheet.create({
-  root:        { flex: 1 },
-  header:      { paddingTop: 12, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  root:        { flex: 1, backgroundColor: '#f5f5f5' },
+  header:      { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#E53935', paddingHorizontal: 20, paddingVertical: 12 },
   backBtn:     { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  backIcon:    { fontSize: 28, fontWeight: '700' },
+  backIcon:    { fontSize: 28, fontWeight: '700', color: '#fff' },
   headerContent: { flex: 1 },
-  headerTitle: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  headerTitle: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3, color: '#fff' },
   headerSub:   { fontSize: 12, marginTop: 2 },
   scroll:      { flex: 1 },
-  scrollContent:{ padding: 16, gap: 12 },
+  scrollContent:{ padding: 16, gap: 12, backgroundColor: '#f5f5f5' },
 
   // Summary cards — 2 cột
   cardGrid: {
@@ -319,17 +526,19 @@ const styles = StyleSheet.create({
     width: (SCREEN_WIDTH - 42) / 2,
     borderRadius: 12, borderWidth: 1,
     padding: 16, overflow: 'hidden', position: 'relative',
+    backgroundColor: '#fff',
+    borderColor: '#e5e7eb',
   },
   cardAccent:  { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
   cardIcon:    { fontSize: 22, marginBottom: 8 },
-  cardLabel:   { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  cardValue:   { fontSize: 20, fontWeight: '700', marginTop: 4, fontVariant: ['tabular-nums'] },
+  cardLabel:   { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3, color: '#6b7280' },
+  cardValue:   { fontSize: 20, fontWeight: '700', marginTop: 4, fontVariant: ['tabular-nums'], color: '#0f172a' },
   cardGrowth:  { fontSize: 11, marginTop: 4, fontWeight: '500' },
 
   // Section chung
-  section:     { borderRadius: 12, borderWidth: 1, padding: 16 },
+  section:     { borderRadius: 12, borderWidth: 1, padding: 16, backgroundColor: '#fff', borderColor: '#e5e7eb' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle:  { fontSize: 15, fontWeight: '600' },
+  sectionTitle:  { fontSize: 15, fontWeight: '600', color: '#0f172a' },
   badge:       { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
   badgeText:   { fontSize: 11, fontWeight: '700' },
 
@@ -367,9 +576,12 @@ const styles = StyleSheet.create({
 
   // Warehouse
   warehouseRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
+  tableHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  tableHeaderText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
   warehouseLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 12 },
   warehouseId:   { fontSize: 11, width: 28 },
-  warehouseName: { fontSize: 13, flex: 1, fontWeight: '500' },
+  warehouseName: { fontSize: 13, flex: 1, fontWeight: '500', color: '#0f172a' },
+  warehouseCategory: { fontSize: 12, color: '#9ca3af' },
   warehouseRight:{ alignItems: 'flex-end', gap: 4 },
   warehouseStock:{ fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
   statusBadge:   { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },

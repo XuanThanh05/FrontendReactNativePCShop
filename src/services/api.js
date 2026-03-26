@@ -8,7 +8,7 @@ import axios from "axios";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://192.168.x.x:8080/api",
+  baseURL: "http://192.168.76.151:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -66,4 +66,18 @@ export const removeCartItem = (cartItemId) =>
 
 // Xóa toàn bộ giỏ hàng
 export const clearCart = () => API.delete("/cart");
+
+// ========== STATISTICS API ==========
+export const getSummaryStatistics = () => 
+  API.get("/admin/statistics/summary");
+
+export const getOrderStatusDistribution = () => 
+  API.get("/admin/statistics/order-status");
+
+export const getTopProducts = () => 
+  API.get("/admin/statistics/top-products");
+
+export const getWarehouseReport = () => 
+  API.get("/admin/statistics/warehouse-report");
+
 export default API;

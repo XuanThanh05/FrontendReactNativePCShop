@@ -32,9 +32,12 @@ export const AuthProvider = ({ children }) => {
 
       const data = res.data;
 
+      // Normalize role: convert "ROLE_ADMIN" -> "admin", "ROLE_CUSTOMER" -> "customer"
+      let normalizedRole = data.role.toLowerCase().replace("role_", "");
+
       const user = {
         username: data.username,
-        role: data.role,
+        role: normalizedRole,
         customerId: data.customerId,
         token: data.accessToken,
       };
