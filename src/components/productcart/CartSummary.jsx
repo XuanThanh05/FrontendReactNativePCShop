@@ -1,12 +1,13 @@
 // src/components/productcart/CartSummary.js
-// Không thay đổi logic — totalPrice từ CartContext đã tính đúng từ API data
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { formatPrice } from "../../constants/mockData";
 import { useCart } from "../../context/CartContext";
+import { useAuth } from "../../context/AuthContext";   // ← Thêm import này
 
 const CartSummary = ({ navigation }) => {
   const { selectedItems, totalPrice, totalItems } = useCart();
+  const { isLoggedIn } = useAuth();                    // ← Lấy trạng thái đăng nhập
 
   const selectedCount = selectedItems.reduce((sum, i) => sum + i.quantity, 0);
   const shippingFee = totalPrice > 10000000 ? 0 : 50000; // miễn ship > 10tr
@@ -14,7 +15,14 @@ const CartSummary = ({ navigation }) => {
 
   const handleCheckout = () => {
     if (selectedCount === 0) return;
-    navigation.navigate("Checkout");
+
+    if (isLoggedIn) {
+      // Người dùng đã đăng nhập → vào trang thanh toán
+      navigation.navigate("Checkout");
+    } else {
+      // Khách chưa đăng nhập → chuyển sang trang Đăng nhập
+      navigation.navigate("Login");
+    }
   };
 
   return (
@@ -62,7 +70,9 @@ const CartSummary = ({ navigation }) => {
         disabled={selectedCount === 0}
         activeOpacity={0.85}
       >
-        <Text style={styles.checkoutText}>Thanh toán ({selectedCount})</Text>
+        <Text style={styles.checkoutText}>
+          Thanh toán ({selectedCount})
+        </Text>
       </TouchableOpacity>
     </View>
   );
