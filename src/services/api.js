@@ -8,7 +8,7 @@ import axios from "axios";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://192.168.x.x:8080/api",
+  baseURL: "http://172.17.x.x:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -79,5 +79,13 @@ export const getTopProducts = () =>
 
 export const getWarehouseReport = () => 
   API.get("/admin/statistics/warehouse-report");
+export const getCategories = () => API.get("/products/categories");
 
+// Top sản phẩm hot theo category
+export const getTopByCategory = (category) =>
+  API.get("/products/top-by-category", { params: { category } });
+
+// Lấy sản phẩm theo category (đã có, nhưng thêm filter brand + price)
+export const getProductsByCategoryFiltered = (category, brand, minPrice, maxPrice) =>
+  API.get(`/products/category/${category}`, { params: { brand, minPrice, maxPrice } });
 export default API;

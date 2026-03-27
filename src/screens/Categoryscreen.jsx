@@ -1,85 +1,177 @@
+// src/screens/CategoryScreen.js
 import {
-    Ionicons,
-    MaterialCommunityIcons,
-    MaterialIcons,
+  Ionicons,
+  MaterialCommunityIcons,
+  MaterialIcons,
 } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import {
-    Dimensions,
-    FlatList,
-    Image,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { categoryDetail, categoryList } from "../constants/Categorydata";
-import { formatPrice, hotProducts } from "../constants/mockData";
+import { formatPrice } from "../constants/mockData";
+import {
+  getCategories,
+  getProductsByCategory,
+  getTopByCategory,
+} from "../services/api";
 import { useCart } from "../context/CartContext";
 
 const { width } = Dimensions.get("window");
-
 const PRODUCT_CARD_WIDTH = (width - 28) / 2;
 
 const CATEGORY_ICON_CONFIG = {
-  laptop: { lib: MaterialCommunityIcons, name: "laptop", color: "#58A8FF" },
-  cpu: { lib: MaterialCommunityIcons, name: "chip", color: "#B39DDB" },
-  ram: { lib: MaterialCommunityIcons, name: "memory", color: "#A4D65E" },
-  storage: { lib: MaterialCommunityIcons, name: "harddisk", color: "#8C7CC3" },
-  gpu: {
-    lib: MaterialCommunityIcons,
-    name: "expansion-card-variant",
-    color: "#5C6BC0",
-  },
-  mainboard: {
-    lib: MaterialCommunityIcons,
-    name: "developer-board",
-    color: "#C8C2DB",
-  },
-  psu: { lib: MaterialCommunityIcons, name: "power-plug", color: "#7B5E47" },
-  cooling: { lib: MaterialCommunityIcons, name: "fan", color: "#4FC3F7" },
-  monitor: { lib: MaterialIcons, name: "monitor", color: "#90A4AE" },
-  keyboard: { lib: MaterialCommunityIcons, name: "keyboard", color: "#607D8B" },
-  mouse: { lib: MaterialCommunityIcons, name: "mouse", color: "#78909C" },
-  headset: { lib: Ionicons, name: "headset", color: "#455A64" },
+  laptop:    { lib: MaterialCommunityIcons, name: "laptop",                 color: "#58A8FF" },
+  cpu:       { lib: MaterialCommunityIcons, name: "chip",                   color: "#B39DDB" },
+  ram:       { lib: MaterialCommunityIcons, name: "memory",                 color: "#A4D65E" },
+  ssd:       { lib: MaterialCommunityIcons, name: "harddisk",               color: "#8C7CC3" },
+  storage:   { lib: MaterialCommunityIcons, name: "harddisk",               color: "#8C7CC3" },
+  gpu:       { lib: MaterialCommunityIcons, name: "expansion-card-variant", color: "#5C6BC0" },
+  mainboard: { lib: MaterialCommunityIcons, name: "developer-board",        color: "#C8C2DB" },
+  psu:       { lib: MaterialCommunityIcons, name: "power-plug",             color: "#7B5E47" },
+  cooling:   { lib: MaterialCommunityIcons, name: "fan",                    color: "#4FC3F7" },
+  monitor:   { lib: MaterialIcons,          name: "monitor",                color: "#90A4AE" },
+  keyboard:  { lib: MaterialCommunityIcons, name: "keyboard",               color: "#607D8B" },
+  mouse:     { lib: MaterialCommunityIcons, name: "mouse",                  color: "#78909C" },
+  headset:   { lib: Ionicons,               name: "headset",                color: "#455A64" },
 };
 
-const CategoryScreen = ({ navigation }) => {
-  const [activeId, setActiveId] = useState("laptop");
-  const [search, setSearch] = useState("");
+const PRICE_RANGES = [
+  { label: "Dưới 5 triệu",   min: 0,          max: 5_000_000 },
+  { label: "5 - 15 triệu",   min: 5_000_000,  max: 15_000_000 },
+  { label: "15 - 30 triệu",  min: 15_000_000, max: 30_000_000 },
+  { label: "Trên 30 triệu",  min: 30_000_000, max: Infinity },
+];
+
+const CategoryScreen = ({ navigation, route }) => {
   const { addToCart } = useCart();
 
-  const detail =
-    categoryDetail[activeId] ?? categoryDetail[categoryList[0]?.id];
-  const isSearching = search.trim().length > 0;
+  const [dbCategories, setDbCategories]         = useState([]);
+  const [activeCategory, setActiveCategory]     = useState(null);
+  const [categoryProducts, setCategoryProducts] = useState([]);
+  const [hotItems, setHotItems]                 = useState([]);
+  const [brands, setBrands]                     = useState([]);
+  const [loadingCats, setLoadingCats]           = useState(true);
+  const [loadingProducts, setLoadingProducts]   = useState(false);
+  const [search, setSearch]                     = useState("");
+  const [priceFilter, setPriceFilter]           = useState(null);
 
-  const searchResults = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return [];
+  // 1. Fetch categories từ DB
+  useEffect(() => {
+    setLoadingCats(true);
+    getCategories()
+      .then(res => {
+        const cats = res.data;
+        setDbCategories(cats);
+        if (route?.params?.categoryKey) {
+          const matched = cats.find(
+            c => c.toLowerCase() === route.params.categoryKey.toLowerCase()
+          );
+          setActiveCategory(matched ?? cats[0] ?? null);
+        } else {
+          setActiveCategory(cats[0] ?? null);
+        }
+      })
+      .catch(err => console.error("Lỗi fetch categories:", err))
+      .finally(() => setLoadingCats(false));
+  }, []);
 
-    return hotProducts.filter(
-      (p) =>
-        p.name.toLowerCase().includes(keyword) ||
-        p.brand.toLowerCase().includes(keyword) ||
-        p.specs.toLowerCase().includes(keyword),
+  // 2. Cập nhật active khi navigate lại từ Home
+  useEffect(() => {
+    if (!route?.params?.categoryKey || dbCategories.length === 0) return;
+    const matched = dbCategories.find(
+      c => c.toLowerCase() === route.params.categoryKey.toLowerCase()
     );
-  }, [search]);
+    if (matched) setActiveCategory(matched);
+  }, [route?.params?.categoryKey, dbCategories]);
 
-  const renderCategoryIcon = (catId) => {
-    const fallback = {
-      lib: MaterialCommunityIcons,
-      name: "shape-outline",
-      color: "#9E9E9E",
-    };
-    const config = CATEGORY_ICON_CONFIG[catId] || fallback;
-    const IconComponent = config.lib;
+  // 3. Fetch sản phẩm khi đổi category
+  useEffect(() => {
+    if (!activeCategory) return;
+    setLoadingProducts(true);
+    setSearch("");
+    setPriceFilter(null);
+    Promise.all([
+      getProductsByCategory(activeCategory),
+      getTopByCategory(activeCategory),
+    ])
+      .then(([prodRes, hotRes]) => {
+        const prods = prodRes.data;
+        setCategoryProducts(prods);
+        setHotItems(hotRes.data);
+        const uniqueBrands = [...new Set(prods.map(p => p.brand).filter(Boolean))];
+        setBrands(uniqueBrands);
+      })
+      .catch(err => console.error("Lỗi fetch sản phẩm category:", err))
+      .finally(() => setLoadingProducts(false));
+  }, [activeCategory]);
 
-    return <IconComponent name={config.name} size={24} color={config.color} />;
+  // 4. Filter local
+  const filteredProducts = (() => {
+    let result = categoryProducts;
+    if (search.trim()) {
+      const kw = search.trim().toLowerCase();
+      result = result.filter(p =>
+        p.name?.toLowerCase().includes(kw) ||
+        p.brand?.toLowerCase().includes(kw) ||
+        p.description?.toLowerCase().includes(kw)
+      );
+    }
+    if (priceFilter) {
+      result = result.filter(p => p.price >= priceFilter.min && p.price <= priceFilter.max);
+    }
+    return result;
+  })();
+
+  const isFiltering = search.trim().length > 0 || priceFilter !== null;
+
+  const renderCategoryIcon = (catName) => {
+    const key     = catName?.toLowerCase() ?? "";
+    const cfg     = CATEGORY_ICON_CONFIG[key] ?? { lib: MaterialCommunityIcons, name: "shape-outline", color: "#9E9E9E" };
+    const IconLib = cfg.lib;
+    return <IconLib name={cfg.name} size={24} color={cfg.color} />;
   };
+
+  const renderProductCard = ({ item }) => {
+    if (item._placeholder) return <View style={{ width: PRODUCT_CARD_WIDTH }} />;
+    return (
+      <TouchableOpacity
+        style={styles.productCard}
+        activeOpacity={0.9}
+        onPress={() => navigation.navigate("Product", { product: item })}
+      >
+        {item.discount > 0 && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>-{item.discount}%</Text>
+          </View>
+        )}
+        <Image source={{ uri: item.imageUrl }} style={styles.productImage} resizeMode="cover" />
+        <View style={styles.productInfo}>
+          <Text style={styles.productBrand}>{item.brand}</Text>
+          <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+          <Text style={styles.productSpecs} numberOfLines={1}>{item.description}</Text>
+          <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
+          <TouchableOpacity style={styles.addButton} onPress={() => addToCart(item)}>
+            <Text style={styles.addButtonText}>+ Thêm vào giỏ</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const displayFiltered = filteredProducts.length % 2 !== 0
+    ? [...filteredProducts, { id: "__ph__", _placeholder: true }]
+    : filteredProducts;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -91,128 +183,74 @@ const CategoryScreen = ({ navigation }) => {
 
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
-          <Ionicons
-            name="search"
-            size={18}
-            color="#222"
-            style={styles.searchIcon}
-          />
+          <Ionicons name="search" size={18} color="#222" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Bạn muốn mua gì hôm nay?"
             placeholderTextColor="#A3A3A3"
             value={search}
-            onChangeText={setSearch}
+            onChangeText={t => { setSearch(t); setPriceFilter(null); }}
             returnKeyType="search"
           />
-          {isSearching && (
-            <TouchableOpacity onPress={() => setSearch("")}>
+          {isFiltering && (
+            <TouchableOpacity onPress={() => { setSearch(""); setPriceFilter(null); }}>
               <Ionicons name="close" size={18} color="#9A9A9A" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {isSearching ? (
+      {loadingCats ? (
+        <ActivityIndicator size="large" color="#EB2D2D" style={{ flex: 1, alignSelf: "center" }} />
+      ) : isFiltering ? (
+        /* ══ KẾT QUẢ LỌC ══ */
         <View style={styles.searchResultContainer}>
           <Text style={styles.searchResultTitle}>
-            Kết quả cho{" "}
-            <Text style={styles.searchKeyword}>&quot;{search}&quot;</Text> (
-            {searchResults.length} sản phẩm)
+            {priceFilter
+              ? <>Giá: <Text style={styles.searchKeyword}>{priceFilter.label}</Text></>
+              : <>Kết quả: <Text style={styles.searchKeyword}>"{search}"</Text></>
+            }
+            {"  "}({filteredProducts.length} sản phẩm)
           </Text>
-
-          {searchResults.length === 0 ? (
+          {filteredProducts.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Ionicons name="search" size={46} color="#B6B6B6" />
               <Text style={styles.emptyText}>Không tìm thấy sản phẩm</Text>
             </View>
           ) : (
             <FlatList
-              data={searchResults}
-              keyExtractor={(item) => item.id}
+              data={displayFiltered}
+              keyExtractor={item => item.id.toString()}
               numColumns={2}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.productList}
               columnWrapperStyle={styles.productRow}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.productCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate("Product", { product: item })
-                  }
-                >
-                  {item.discount > 0 && (
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountText}>-{item.discount}%</Text>
-                    </View>
-                  )}
-
-                  <Image
-                    source={{ uri: item.image }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
-
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productBrand}>{item.brand}</Text>
-                    <Text style={styles.productName} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <Text style={styles.productSpecs} numberOfLines={1}>
-                      {item.specs}
-                    </Text>
-                    <Text style={styles.productPrice}>
-                      {formatPrice(item.price)}
-                    </Text>
-                    {item.originalPrice > item.price && (
-                      <Text style={styles.productOriginalPrice}>
-                        {formatPrice(item.originalPrice)}
-                      </Text>
-                    )}
-                    <TouchableOpacity
-                      style={styles.addButton}
-                      onPress={() => addToCart(item)}
-                    >
-                      <Text style={styles.addButtonText}>+ Thêm vào giỏ</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              )}
+              renderItem={renderProductCard}
             />
           )}
         </View>
       ) : (
+        /* ══ LAYOUT 2 CỘT ══ */
         <View style={styles.body}>
+          {/* Cột trái */}
           <ScrollView
             style={styles.leftColumn}
             contentContainerStyle={styles.leftColumnContent}
             showsVerticalScrollIndicator={false}
           >
-            {categoryList.map((cat) => {
-              const isActive = activeId === cat.id;
+            {dbCategories.map(cat => {
+              const isActive = activeCategory === cat;
               return (
                 <TouchableOpacity
-                  key={cat.id}
+                  key={cat}
                   activeOpacity={0.9}
-                  style={[
-                    styles.categoryItem,
-                    isActive && styles.categoryItemActive,
-                  ]}
-                  onPress={() => setActiveId(cat.id)}
+                  style={[styles.categoryItem, isActive && styles.categoryItemActive]}
+                  onPress={() => { setActiveCategory(cat); setSearch(""); setPriceFilter(null); }}
                 >
                   {isActive && <View style={styles.activeIndicator} />}
-                  <View style={styles.categoryIconWrap}>
-                    {renderCategoryIcon(cat.id)}
-                  </View>
-                  <Text
-                    numberOfLines={2}
-                    style={[
-                      styles.categoryName,
-                      isActive && styles.categoryNameActive,
-                    ]}
-                  >
-                    {cat.name}
+                  <View style={styles.categoryIconWrap}>{renderCategoryIcon(cat)}</View>
+                  <Text numberOfLines={2} style={[styles.categoryName, isActive && styles.categoryNameActive]}>
+                    {cat}
                   </Text>
                 </TouchableOpacity>
               );
@@ -220,127 +258,108 @@ const CategoryScreen = ({ navigation }) => {
             <View style={styles.bottomSpacer} />
           </ScrollView>
 
+          {/* Cột phải */}
           <ScrollView
             style={styles.rightColumn}
             contentContainerStyle={styles.rightColumnContent}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.sectionTitleCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>{detail.title}</Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => setSearch(detail.title)}
-                >
-                  <Text style={styles.seeAll}>Xem tất cả &gt;</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            {loadingProducts ? (
+              <ActivityIndicator color="#EB2D2D" style={{ marginTop: 30 }} />
+            ) : (
+              <>
+                {/* Title + Xem tất cả */}
+                <View style={styles.sectionTitleCard}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>{activeCategory}</Text>
+                    <TouchableOpacity onPress={() => { setSearch(activeCategory ?? ""); setPriceFilter(null); }}>
+                      <Text style={styles.seeAll}>Xem tất cả &gt;</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionLabel}>Hãng sản xuất</Text>
-              <View style={styles.chipWrap}>
-                {detail.brands.map((brand, index) => (
-                  <TouchableOpacity
-                    key={`${brand}-${index}`}
-                    style={styles.chip}
-                    activeOpacity={0.8}
-                    onPress={() => setSearch(brand)}
-                  >
-                    <Text style={styles.chipText}>{brand}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionLabel}>Phân khúc giá</Text>
-              <View style={styles.chipWrap}>
-                {detail.priceRanges.map((range, index) => (
-                  <TouchableOpacity
-                    key={`${range.label}-${index}`}
-                    style={styles.chip}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.chipText}>{range.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionLabel}>{detail.title} HOT ⚡</Text>
-              <View style={styles.hotWrap}>
-                {detail.hotItems.map((item, index) => (
-                  <TouchableOpacity
-                    key={`${item.label}-${index}`}
-                    style={styles.hotChip}
-                    activeOpacity={0.8}
-                    onPress={() => setSearch(item.label)}
-                  >
-                    <Text style={styles.hotChipText}>{item.label}</Text>
-                    {item.tag !== "" && (
-                      <View
-                        style={[
-                          styles.hotBadge,
-                          item.tag === "HOT"
-                            ? styles.badgeHot
-                            : styles.badgeNew,
-                        ]}
-                      >
-                        <Text style={styles.hotBadgeText}>{item.tag}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Render Category Products to test */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionLabel}>Sản phẩm gợi ý</Text>
-              <View style={{ gap: 12 }}>
-                {hotProducts.filter((p) => p.category === activeId).length ===
-                0 ? (
-                  <Text
-                    style={{ fontSize: 13, color: "#888", fontStyle: "italic" }}
-                  >
-                    Chưa có sản phẩm demo cho danh mục này.
-                  </Text>
-                ) : (
-                  hotProducts
-                    .filter((p) => p.category === activeId)
-                    .slice(0, 5)
-                    .map((product) => (
-                      <TouchableOpacity
-                        key={product.id}
-                        style={styles.miniProductCard}
-                        activeOpacity={0.8}
-                        onPress={() =>
-                          navigation.navigate("Product", { product })
-                        }
-                      >
-                        <Image
-                          source={{ uri: product.image }}
-                          style={styles.miniProductImg}
-                        />
-                        <View style={styles.miniProductInfo}>
-                          <Text
-                            style={styles.miniProductName}
-                            numberOfLines={2}
-                          >
-                            {product.name}
-                          </Text>
-                          <Text style={styles.miniProductPrice}>
-                            {formatPrice(product.price)}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))
+                {/* Hãng sản xuất từ DB */}
+                {brands.length > 0 && (
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionLabel}>Hãng sản xuất</Text>
+                    <View style={styles.chipWrap}>
+                      {brands.map(brand => (
+                        <TouchableOpacity
+                          key={brand}
+                          style={styles.chip}
+                          activeOpacity={0.8}
+                          onPress={() => { setSearch(brand); setPriceFilter(null); }}
+                        >
+                          <Text style={styles.chipText}>{brand}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
                 )}
-              </View>
-            </View>
 
+                {/* Phân khúc giá */}
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionLabel}>Phân khúc giá</Text>
+                  <View style={styles.chipWrap}>
+                    {PRICE_RANGES.map(range => {
+                      const isActive = priceFilter?.label === range.label;
+                      return (
+                        <TouchableOpacity
+                          key={range.label}
+                          style={[styles.chip, isActive && styles.chipActive]}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setSearch("");
+                            setPriceFilter(prev => prev?.label === range.label ? null : range);
+                          }}
+                        >
+                          <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                            {range.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Sản phẩm HOT từ API */}
+                {hotItems.length > 0 && (
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionLabel}>{activeCategory} HOT ⚡</Text>
+                    <View style={{ gap: 12 }}>
+                      {hotItems.map(product => (
+                        <TouchableOpacity
+                          key={product.id}
+                          style={styles.miniProductCard}
+                          activeOpacity={0.8}
+                          onPress={() => navigation.navigate("Product", { product })}
+                        >
+                          <Image
+                            source={{ uri: product.imageUrl }}
+                            style={styles.miniProductImg}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.miniProductInfo}>
+                            <Text style={styles.miniProductName} numberOfLines={2}>
+                              {product.name}
+                            </Text>
+                            <Text style={styles.miniProductPrice}>
+                              {formatPrice(product.price)}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.miniAddBtn}
+                              onPress={() => addToCart(product)}
+                            >
+                              <Text style={styles.miniAddBtnText}>+ Thêm</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
             <View style={styles.bottomSpacer} />
           </ScrollView>
         </View>
@@ -393,7 +412,7 @@ const styles = StyleSheet.create({
   },
 
   leftColumn: {
-    width: 1,
+    width: 80,
     flexShrink: 0,
     backgroundColor: "#F2F2F2",
   },
@@ -494,46 +513,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
+  chipActive: { backgroundColor: "#EB2D2D", borderColor: "#EB2D2D" },
   chipText: {
     color: "#333",
     fontSize: 12,
     fontWeight: "500",
   },
-
-  hotWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  hotChip: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    position: "relative",
-  },
-  hotChipText: {
-    color: "#333",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  hotBadge: {
-    marginLeft: 8,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  badgeHot: { backgroundColor: "#EB2D2D" },
-  badgeNew: { backgroundColor: "#43A047" },
-  hotBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "800",
-  },
+  chipTextActive: { color: "#fff" },
 
   bottomSpacer: { height: 20 },
 
@@ -661,5 +647,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#EB2D2D",
+    marginBottom: 6,
+  },
+  miniAddBtn: {
+    backgroundColor: "#EB2D2D",
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    alignSelf: "flex-start",
+  },
+  miniAddBtnText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

@@ -1,10 +1,4 @@
 // src/screens/HomeScreen.js
-// Thay đổi so với bản gốc:
-// 1. navigate("Product") → navigate("ProductDetail") — tên screen chuẩn
-// 2. addToCart(product) — product từ API đã có .id đúng, CartContext xử lý
-// 3. product.imageUrl → hiển thị ảnh đúng (ProductDTO dùng imageUrl)
-// 4. product.stockQuantity → dùng khi check hàng
-
 import { useState, useEffect } from "react";
 import {
   Dimensions,
@@ -20,26 +14,53 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { banners, categories, formatPrice } from "../constants/mockData";
-import { getProductsPaged, searchProducts } from "../services/api";
+import { banners, formatPrice } from "../constants/mockData";
+import { getProductsPaged, searchProducts, getCategories } from "../services/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 
 const { width } = Dimensions.get("window");
 
+// Map category name (lowercase) → emoji
+const CATEGORY_ICON_MAP = {
+  laptop:    "💻",
+  cpu:       "🔲",
+  gpu:       "🎮",
+  ram:       "🧠",
+  ssd:       "💾",
+  storage:   "🗄️",
+  mainboard: "🖥️",
+  psu:       "🔌",
+  cooling:   "❄️",
+  monitor:   "🖥️",
+  keyboard:  "⌨️",
+  mouse:     "🖱️",
+  headset:   "🎧",
+};
+
 const HomeScreen = ({ navigation }) => {
-  const [search, setSearch] = useState("");
-  const { addToCart } = useCart();
-  const { currentUser } = useAuth();
+  const [search, setSearch]             = useState("");
+  const { addToCart }                   = useCart();
+  const { currentUser }                 = useAuth();
   const [activeBanner, setActiveBanner] = useState(0);
 
-  const [products, setProducts]         = useState([]);
-  const [page, setPage]                 = useState(0);
-  const [hasMore, setHasMore]           = useState(true);
-  const [loading, setLoading]           = useState(false);
-  const [loadingMore, setLoadingMore]   = useState(false);
+  const [products, setProducts]           = useState([]);
+  const [page, setPage]                   = useState(0);
+  const [hasMore, setHasMore]             = useState(true);
+  const [loading, setLoading]             = useState(false);
+  const [loadingMore, setLoadingMore]     = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching]       = useState(false);
+  const [searching, setSearching]         = useState(false);
+
+  // Categories từ DB
+  const [dbCategories, setDbCategories] = useState([]);
+
+  // Fetch categories từ DB (chỉ hiển thị category thực sự có sản phẩm)
+  useEffect(() => {
+    getCategories()
+      .then(res => setDbCategories(res.data)) // ["Laptop", "CPU", "GPU", ...]
+      .catch(err => console.error("Lỗi fetch categories:", err));
+  }, []);
 
   useEffect(() => { fetchProducts(0, true); }, []);
 
@@ -69,6 +90,7 @@ const HomeScreen = ({ navigation }) => {
     fetchProducts(page + 1, false);
   };
 
+  // Debounced search
   useEffect(() => {
     if (search.length === 0) { setSearchResults([]); return; }
     const timer = setTimeout(async () => {
@@ -85,24 +107,37 @@ const HomeScreen = ({ navigation }) => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const rawProducts    = search.length > 0 ? searchResults : products;
+  // Build danh sách category từ DB
+  const filteredCategories = dbCategories.map(catName => ({
+    id:   catName,
+    key:  catName,
+    name: catName,
+    icon: CATEGORY_ICON_MAP[catName.toLowerCase()] ?? "📦",
+  }));
+
+  // Bấm category → navigate sang CategoryScreen với categoryKey
+  const handleCategoryPress = (categoryName) => {
+    navigation.navigate("Category", { categoryKey: categoryName });
+  };
+
+  const rawProducts     = search.length > 0 ? searchResults : products;
   const displayProducts = rawProducts.length % 2 !== 0
     ? [...rawProducts, { id: "__placeholder__", _placeholder: true }]
     : rawProducts;
 
   const renderProduct = ({ item: product }) => {
     if (product._placeholder) {
-      return <View style={[styles.productCard, { backgroundColor: "transparent", elevation: 0, shadowOpacity: 0 }]} />;
+      return (
+        <View style={[styles.productCard, { backgroundColor: "transparent", elevation: 0, shadowOpacity: 0 }]} />
+      );
     }
 
-    // ProductDTO fields: imageUrl, stockQuantity
-    const imageUri  = product.imageUrl ?? product.image ?? '';
+    const imageUri   = product.imageUrl ?? product.image ?? "";
     const outOfStock = (product.stockQuantity ?? product.stock ?? 1) === 0;
 
     return (
       <TouchableOpacity
         style={styles.productCard}
-        // ⚠️ Tên screen phải khớp với Stack.Screen name trong navigator bạn đặt
         onPress={() => navigation.navigate("Product", { product })}
         activeOpacity={0.85}
       >
@@ -117,11 +152,7 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
-        <Image
-          source={{ uri: imageUri }}
-          style={styles.productImage}
-          resizeMode="cover"
-        />
+        <Image source={{ uri: imageUri }} style={styles.productImage} resizeMode="cover" />
 
         <View style={styles.productInfo}>
           <Text style={styles.productBrand}>{product.brand}</Text>
@@ -163,7 +194,10 @@ const HomeScreen = ({ navigation }) => {
             style={styles.bannerScroll}
           >
             {banners.map(banner => (
-              <View key={banner.id} style={[styles.banner, { backgroundColor: banner.bg, width: width - 24 }]}>
+              <View
+                key={banner.id}
+                style={[styles.banner, { backgroundColor: banner.bg, width: width - 24 }]}
+              >
                 <View style={styles.bannerContent}>
                   <Text style={styles.bannerEmoji}>{banner.emoji}</Text>
                   <View>
@@ -182,26 +216,30 @@ const HomeScreen = ({ navigation }) => {
             ))}
           </View>
 
-          {/* Danh mục */}
+          {/* Danh mục — render từ DB */}
           <Text style={styles.sectionTitle}>Danh mục</Text>
-          <FlatList
-            data={categories}
-            keyExtractor={i => i.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryList}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.categoryItem}
-                onPress={() => navigation.navigate("Category", { key: item.key })}
-              >
-                <View style={styles.categoryIcon}>
-                  <Text style={styles.categoryEmoji}>{item.icon}</Text>
-                </View>
-                <Text style={styles.categoryName}>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-          />
+          {filteredCategories.length === 0 ? (
+            <ActivityIndicator size="small" color="#E53935" style={{ marginBottom: 8, marginLeft: 12 }} />
+          ) : (
+            <FlatList
+              data={filteredCategories}
+              keyExtractor={i => i.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryList}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.categoryItem}
+                  onPress={() => handleCategoryPress(item.key)}
+                >
+                  <View style={styles.categoryIcon}>
+                    <Text style={styles.categoryEmoji}>{item.icon}</Text>
+                  </View>
+                  <Text style={styles.categoryName}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
         </>
       )}
 
@@ -277,8 +315,8 @@ const HomeScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: "#f5f5f5" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#E53935", paddingHorizontal: 16, paddingVertical: 12 },
+  safe:       { flex: 1, backgroundColor: "#f5f5f5" },
+  header:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#E53935", paddingHorizontal: 16, paddingVertical: 12 },
   headerLeft: { flexDirection: "row", alignItems: "center" },
   logo:       { fontSize: 22, fontWeight: "900", color: "#fff" },
   logoAccent: { color: "#FFD700" },
@@ -323,8 +361,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 6,
   },
-  discountBadge: { position: "absolute", top: 8, left: 8, zIndex: 1, backgroundColor: "#E53935", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
-  discountText:  { color: "#fff", fontSize: 11, fontWeight: "700" },
+  discountBadge:     { position: "absolute", top: 8, left: 8, zIndex: 1, backgroundColor: "#E53935", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
+  discountText:      { color: "#fff", fontSize: 11, fontWeight: "700" },
   outOfStockOverlay: { position: "absolute", top: 8, right: 8, zIndex: 1, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
   outOfStockText:    { color: "#fff", fontSize: 10, fontWeight: "700" },
   productImage:  { width: "100%", height: 140 },
