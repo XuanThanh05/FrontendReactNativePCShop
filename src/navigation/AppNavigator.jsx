@@ -7,6 +7,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import StatisticsScreen from "../screens/StatisticsScreen"; // ← thêm mới
 import { CartProvider, useCart } from "../context/CartContext";
+import { ComparisonProvider } from "../context/ComparisonContext";
+import ComparisonScreen from "../screens/ComparisonScreen";
 import AccountScreen from "../screens/Accountscreen";
 import CartScreen from "../screens/CartScreen";
 import CategoryScreen from "../screens/Categoryscreen";
@@ -139,7 +141,8 @@ const AppNavigator = () => {
     <AuthProvider>
       {/* CartProvider bọc ngoài để mọi màn hình dùng được giỏ hàng */}
       <CartProvider>
-        <NavigationContainer>
+        <ComparisonProvider>
+          <NavigationContainer>
           <Stack.Navigator
             initialRouteName="Main"
             screenOptions={{ headerShown: false }}
@@ -158,8 +161,10 @@ const AppNavigator = () => {
             <Stack.Screen name="StoreMap" component={StoreMapScreen} />
             <Stack.Screen name="ShippingCalculator" component={ShippingCalculatorScreen} />
             <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+            <Stack.Screen name="Comparison" component={ComparisonScreen} />
           </Stack.Navigator>
         </NavigationContainer>
+      </ComparisonProvider>
       </CartProvider>
     </AuthProvider>
   );

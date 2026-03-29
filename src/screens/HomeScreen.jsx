@@ -1,5 +1,6 @@
 // src/screens/HomeScreen.js
 import { useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   Dimensions,
   FlatList,
@@ -17,7 +18,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { banners, formatPrice } from "../constants/mockData";
 import { getProductsPaged, searchProducts, getCategories } from "../services/api";
 import { useCart } from "../context/CartContext";
+import { useComparison } from "../context/ComparisonContext";
 import { useAuth } from "../context/AuthContext";
+import ComparisonDock from "../components/comparison/ComparisonDock";
 
 const { width } = Dimensions.get("window");
 
@@ -41,6 +44,7 @@ const CATEGORY_ICON_MAP = {
 const HomeScreen = ({ navigation }) => {
   const [search, setSearch]             = useState("");
   const { addToCart }                   = useCart();
+  const { addToComparison, removeFromComparison, isInComparison, count: comparisonCount } = useComparison();
   const { currentUser }                 = useAuth();
   const [activeBanner, setActiveBanner] = useState(0);
 
@@ -134,6 +138,15 @@ const HomeScreen = ({ navigation }) => {
 
     const imageUri   = product.imageUrl ?? product.image ?? "";
     const outOfStock = (product.stockQuantity ?? product.stock ?? 1) === 0;
+    const inComparison = isInComparison(product.id);
+
+    const handleComparisonToggle = () => {
+      if (inComparison) {
+        removeFromComparison(product.id);
+      } else {
+        addToComparison(product);
+      }
+    };
 
     return (
       <TouchableOpacity
@@ -159,15 +172,23 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
           <Text style={styles.productSpecs} numberOfLines={1}>{product.description}</Text>
           <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
-          <TouchableOpacity
-            style={[styles.addBtn, outOfStock && styles.addBtnDisabled]}
-            onPress={() => !outOfStock && addToCart(product)}
-            disabled={outOfStock}
-          >
-            <Text style={styles.addBtnText}>
-              {outOfStock ? "Hết hàng" : "+ Thêm vào giỏ"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.addBtn, outOfStock && styles.addBtnDisabled]}
+              onPress={() => !outOfStock && addToCart(product)}
+              disabled={outOfStock}
+            >
+              <Ionicons name="cart-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.comparisonBtn, inComparison && styles.comparisonBtnActive]}
+              onPress={handleComparisonToggle}
+            >
+              <Text style={[styles.comparisonBtnText, inComparison && styles.comparisonBtnTextActive]}>
+                {inComparison ? "Đã thêm so sánh" : "So sánh"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -271,11 +292,24 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.headerLeft}>
           <Text style={styles.logo}>PC<Text style={styles.logoAccent}>Shop</Text></Text>
         </View>
-        {currentUser?.role === "admin" && (
-          <TouchableOpacity style={styles.adminBtn} onPress={() => navigation.navigate("Statistics")}>
-            <Text style={styles.adminBtnText}>📊 Thống kê</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.headerRight}>
+          {comparisonCount > 0 && (
+            <TouchableOpacity
+              style={styles.headerComparisonBtn}
+              onPress={() => navigation.navigate("Comparison")}
+            >
+              <Text style={styles.headerComparisonIcon}>⚖️</Text>
+              <View style={styles.comparisonBadge}>
+                <Text style={styles.comparisonBadgeText}>{comparisonCount}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          {currentUser?.role === "admin" && (
+            <TouchableOpacity style={styles.adminBtn} onPress={() => navigation.navigate("Statistics")}>
+              <Text style={styles.adminBtnText}>📊</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Search */}
@@ -310,6 +344,8 @@ const HomeScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       />
+
+      <ComparisonDock navigation={navigation} />
     </SafeAreaView>
   );
 };
@@ -371,9 +407,20 @@ const styles = StyleSheet.create({
   productName:   { fontSize: 13, fontWeight: "700", color: "#1a1a1a", marginTop: 2 },
   productSpecs:  { fontSize: 11, color: "#888", marginTop: 3 },
   productPrice:  { fontSize: 15, fontWeight: "800", color: "#E53935", marginTop: 6 },
-  addBtn:        { backgroundColor: "#E53935", borderRadius: 8, paddingVertical: 7, alignItems: "center", marginTop: 8 },
+  buttonRow:     { flexDirection: "row", gap: 6, marginTop: 8, alignItems: "center" },
+  addBtn:        { width: 46, height: 36, backgroundColor: "#FFB300", borderRadius: 8, alignItems: "center", justifyContent: "center" },
   addBtnDisabled:{ backgroundColor: "#ccc" },
   addBtnText:    { color: "#fff", fontSize: 12, fontWeight: "700" },
+  comparisonBtn: { flex: 1, height: 36, backgroundColor: "#FF5A1F", borderRadius: 8, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
+  comparisonBtnActive: { backgroundColor: "#FF5A1F" },
+  comparisonBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  comparisonBtnTextActive: { color: "#fff" },
+
+  headerRight:    { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerComparisonBtn: { position: "relative", paddingHorizontal: 10, paddingVertical: 6 },
+  headerComparisonIcon: { fontSize: 20, color: "#fff" },
+  comparisonBadge: { position: "absolute", top: -6, right: -8, backgroundColor: "#FFD700", borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center" },
+  comparisonBadgeText: { fontSize: 11, fontWeight: "700", color: "#333" },
 
   noResult:     { alignItems: "center", paddingVertical: 60 },
   noResultIcon: { fontSize: 48 },

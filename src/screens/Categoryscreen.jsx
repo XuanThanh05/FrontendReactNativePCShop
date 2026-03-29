@@ -26,6 +26,7 @@ import {
   getTopByCategory,
 } from "../services/api";
 import { useCart } from "../context/CartContext";
+import { useComparison } from "../context/ComparisonContext";
 
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 28) / 2;
@@ -55,6 +56,7 @@ const PRICE_RANGES = [
 
 const CategoryScreen = ({ navigation, route }) => {
   const { addToCart } = useCart();
+  const { addToComparison, removeFromComparison, isInComparison, count: comparisonCount } = useComparison();
 
   const [dbCategories, setDbCategories]         = useState([]);
   const [activeCategory, setActiveCategory]     = useState(null);
@@ -144,6 +146,16 @@ const CategoryScreen = ({ navigation, route }) => {
 
   const renderProductCard = ({ item }) => {
     if (item._placeholder) return <View style={{ width: PRODUCT_CARD_WIDTH }} />;
+    const inComparison = isInComparison(item.id);
+
+    const handleComparisonToggle = () => {
+      if (inComparison) {
+        removeFromComparison(item.id);
+      } else {
+        addToComparison(item);
+      }
+    };
+
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -161,9 +173,19 @@ const CategoryScreen = ({ navigation, route }) => {
           <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
           <Text style={styles.productSpecs} numberOfLines={1}>{item.description}</Text>
           <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => addToCart(item)}>
-            <Text style={styles.addButtonText}>+ Thêm vào giỏ</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.addButton} onPress={() => addToCart(item)}>
+              <Ionicons name="cart-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.comparisonBtn, inComparison && styles.comparisonBtnActive]}
+              onPress={handleComparisonToggle}
+            >
+              <Text style={[styles.comparisonBtnText, inComparison && styles.comparisonBtnTextActive]}>
+                {inComparison ? "Đã thêm so sánh" : "So sánh"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -179,6 +201,17 @@ const CategoryScreen = ({ navigation, route }) => {
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Danh mục</Text>
+        {comparisonCount > 0 && (
+          <TouchableOpacity
+            style={styles.headerComparisonBtn}
+            onPress={() => navigation.navigate("Comparison")}
+          >
+            <Text style={styles.headerComparisonIcon}>⚖️</Text>
+            <View style={styles.comparisonBadge}>
+              <Text style={styles.comparisonBadgeText}>{comparisonCount}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.searchContainer}>
@@ -374,6 +407,9 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#ECECEC" },
 
   header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     backgroundColor: "#EB2D2D",
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -606,18 +642,43 @@ const styles = StyleSheet.create({
     color: "#BBB",
     textDecorationLine: "line-through",
   },
-  addButton: {
+  buttonRow: {
+    flexDirection: "row",
+    gap: 6,
     marginTop: 8,
-    backgroundColor: "#FFF0F0",
-    borderRadius: 8,
-    paddingVertical: 7,
     alignItems: "center",
+  },
+  addButton: {
+    width: 46,
+    height: 36,
+    backgroundColor: "#FFB300",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   addButtonText: {
     color: "#EB2D2D",
     fontSize: 12,
     fontWeight: "700",
   },
+  comparisonBtn: {
+    flex: 1,
+    height: 36,
+    backgroundColor: "#FF5A1F",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  comparisonBtnActive: { backgroundColor: "#FF5A1F" },
+  comparisonBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  comparisonBtnTextActive: { color: "#fff" },
+
+  headerComparisonBtn: { position: "relative", paddingHorizontal: 10, paddingVertical: 6 },
+  headerComparisonIcon: { fontSize: 20, color: "#fff" },
+  comparisonBadge: { position: "absolute", top: -6, right: -8, backgroundColor: "#FFD700", borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center" },
+  comparisonBadgeText: { fontSize: 11, fontWeight: "700", color: "#333" },
+
   miniProductCard: {
     flexDirection: "row",
     backgroundColor: "#F9F9F9",

@@ -1,8 +1,10 @@
 // src/screens/ProductDetailScreen.js
-import { Feather, Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
+  Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,7 +14,48 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
+import { parseProductSpecs } from "../constants/productSpecs";
+import { getProductsByCategory, getProductsPaged } from "../services/api";
 import { useCart } from "../context/CartContext";
+import { useComparison } from "../context/ComparisonContext";
+import ComparisonDock from "../components/comparison/ComparisonDock";
+
+const parseGalleryMetadata = (tag = "", description = "") => {
+  const source = `${String(tag || "")}||${String(description || "")}`;
+  const match = source.match(/gallery\s*:\s*(.+)$/i);
+  if (!match?.[1]) return [];
+
+  return match[1]
+    .split(";")
+    .map((u) => u.trim())
+    .filter((u) => /^https?:\/\//i.test(u));
+};
+
+const stripGalleryMetadata = (text = "") => {
+  const value = String(text || "");
+  return value
+    .replace(/\|\|\s*gallery\s*:\s*.+$/i, "")
+    .replace(/\bgallery\s*:\s*https?:\/\/\S+(?:\s*;\s*https?:\/\/\S+)*/gi, "")
+    .trim();
+};
+
+const ASUS_ROG_STRIX_G15_GALLERY = [
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-1.jpg",
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-2.png",
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-3.png",
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-4.png",
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-5.png",
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-6.png",
+  "https://dlcdnwebimgs.asus.com/files/media/2b37c5bc-fc31-4697-925a-6622e78c5cf9/v4/img/nv-slick-7.png",
+];
+
+const getPresetGalleryByProduct = (product = {}) => {
+  const normalizedName = String(product.name || "").toLowerCase();
+  if (normalizedName.includes("asus rog strix g15")) {
+    return ASUS_ROG_STRIX_G15_GALLERY;
+  }
+  return [];
+};
 
 const UU_DAI = [
   "Gói 15 ngày bao test.",
@@ -34,66 +77,40 @@ const FLASH_COUNTDOWN = [
   { key: "second", label: "GIÂY", value: "25" },
 ];
 
-const RELATED = [
-  { id: 1, name: "Lenovo IdeaPad Gaming 3 i5-12500H RTX 3050", price: 22490000, discount: 10, emoji: "💻" },
-  { id: 2, name: "ASUS TUF Gaming F15 i7-12700H RTX 4060",    price: 29990000, discount: 8,  emoji: "💻" },
-  { id: 3, name: "MSI Cyborg 15 A13VF i7-13620H RTX 4060",    price: 26490000, discount: 15, emoji: "💻" },
-  { id: 4, name: "Acer Nitro 5 AN515 i7-12700H RTX 3060",     price: 27990000, discount: 5,  emoji: "💻" },
-];
-
-const SPEC_LABELS = [
-  "CPU (Bộ vi xử lý)",
-  "Ram (Bộ nhớ trong)",
-  "Storage (Ổ cứng)",
-  "Màn hình",
-  "Card đồ họa",
-];
-
-const SPEC_DEFAULTS = [
-  "Intel Core i7 13650HX (14 nhân 20 luồng, 2.6GHz, turbo 4.9GHz, 24MB Cache).",
-  "16GB DDR5 có thể nâng cấp được.",
-  "512GB SSD M.2 PCIe NVMe.",
-  "15.6 inch FHD 144Hz IPS 100% sRGB.",
-  "NVIDIA GeForce RTX 4060 8GB GDDR6.",
-];
-
-const ACTION_ICON_BLUE = "#5AA8FF";
-
 // ── Normalize ProductDTO → shape ProductDetailScreen dùng ──────────────────
 // ProductDTO: { id, name, description, price, stockQuantity, category,
 //               brand, imageUrl, status, discount, tag }
 // Screen cần:  { id, name, price, stock, image, brand, discount,
 //               rating, reviews, originalPrice, specs, description }
-const normalizeProduct = (p) => ({
-  id:            p.id,
-  name:          p.name          ?? '',
-  description:   p.description   ?? '',
-  price:         p.price         ?? 0,
-  stock:         p.stockQuantity ?? p.stock ?? 0,   // ProductDTO dùng stockQuantity
-  image:         p.imageUrl      ?? p.image ?? '',   // ProductDTO dùng imageUrl
-  brand:         p.brand         ?? '',
-  discount:      p.discount      ?? 0,
-  category:      p.category      ?? '',
-  tag:           p.tag           ?? '',
-  status:        p.status        ?? '',
-  // Fields không có trong ProductDTO — dùng fallback hợp lý
-  rating:        p.rating        ?? 0,
-  reviews:       p.reviews       ?? 0,
-  originalPrice: p.originalPrice ?? (p.discount > 0
-    ? Math.round(p.price / (1 - p.discount / 100))
-    : 0),
-  specs:         p.specs         ?? p.description ?? '',
-});
+const normalizeProduct = (p) => {
+  const cleanedDescription = stripGalleryMetadata(p.description ?? "");
+  const parsedGallery = parseGalleryMetadata(p.tag, p.description);
+  const presetGallery = getPresetGalleryByProduct(p);
+  const galleryImages = (presetGallery && presetGallery.length > 0)
+    ? presetGallery
+    : Array.from(new Set(parsedGallery || []));
 
-const parseSpecs = (specString = "") => {
-  const values = specString
-    .split("|")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return SPEC_LABELS.map((label, index) => ({
-    label,
-    value: values[index] || SPEC_DEFAULTS[index],
-  }));
+  return {
+    id:            p.id,
+    name:          p.name          ?? '',
+    description:   cleanedDescription,
+    price:         p.price         ?? 0,
+    stock:         p.stockQuantity ?? p.stock ?? 0,   // ProductDTO dùng stockQuantity
+    image:         p.imageUrl      ?? p.image ?? '',   // ProductDTO dùng imageUrl
+    brand:         p.brand         ?? '',
+    discount:      p.discount      ?? 0,
+    category:      p.category      ?? '',
+    tag:           p.tag           ?? '',
+    galleryImages,
+    status:        p.status        ?? '',
+    // Fields không có trong ProductDTO — dùng fallback hợp lý
+    rating:        p.rating        ?? 0,
+    reviews:       p.reviews       ?? 0,
+    originalPrice: p.originalPrice ?? (p.discount > 0
+      ? Math.round(p.price / (1 - p.discount / 100))
+      : 0),
+    specs:         stripGalleryMetadata(p.specs ?? cleanedDescription ?? ''),
+  };
 };
 
 // ── Sub-components (giữ nguyên) ────────────────────────────────────────────
@@ -140,13 +157,23 @@ const SpecRow = ({ label, value, isLast, index }) => (
   </View>
 );
 
-const RelatedCard = ({ item }) => (
-  <TouchableOpacity activeOpacity={0.8} style={styles.relatedCard}>
+const RelatedCard = ({ item, navigation }) => (
+  <TouchableOpacity
+    activeOpacity={0.8}
+    style={styles.relatedCard}
+    onPress={() => navigation.push("Product", { product: item })}
+  >
     <View style={styles.relatedImageBox}>
-      <View style={styles.smallDiscountBadge}>
-        <Text style={styles.smallDiscountBadgeText}>-{item.discount}%</Text>
-      </View>
-      <Text style={styles.relatedEmoji}>{item.emoji}</Text>
+      {item.discount > 0 && (
+        <View style={styles.smallDiscountBadge}>
+          <Text style={styles.smallDiscountBadgeText}>-{item.discount}%</Text>
+        </View>
+      )}
+      {item.image ? (
+        <Image source={{ uri: item.image }} style={styles.relatedImage} resizeMode="contain" />
+      ) : (
+        <Text style={styles.relatedImagePlaceholder}>🖼️</Text>
+      )}
     </View>
     <View style={styles.relatedBody}>
       <Text style={styles.relatedName} numberOfLines={2}>{item.name}</Text>
@@ -168,17 +195,85 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const product = normalizeProduct(route.params.product);
 
   const { addToCart, totalItems } = useCart();
+  const { addToComparison, removeFromComparison, isInComparison } = useComparison();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
-  // Dùng ảnh từ product nếu không có thumbnail cứng
-  const THUMBNAIL_IMAGES = product.image ? [product.image] : [];
+  // Gallery ưu tiên từ API (tag: gallery:url1;url2;...), luôn bao gồm ảnh chính.
+  const THUMBNAIL_IMAGES = Array.from(
+    new Set([product.image, ...(product.galleryImages || [])].filter(Boolean))
+  );
 
   const [combos, setCombos] = useState([
     { id: 1, name: "Chuột gaming Logitech G305 Lightspeed Wireless", price: 790000,  listPrice: 890000,  emoji: "🖱️", checked: true  },
     { id: 2, name: "Tai nghe gaming Logitech G335 Wired",            price: 990000,  listPrice: 1190000, emoji: "🎧", checked: false },
   ]);
 
-  const specs = parseSpecs(product.specs);
+  const specs = parseProductSpecs(product.specs);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRelatedProducts = async () => {
+      setRelatedLoading(true);
+
+      try {
+        let raw = [];
+
+        if (product.category) {
+          const byCategory = await getProductsByCategory(product.category);
+          raw = Array.isArray(byCategory?.data) ? byCategory.data : [];
+        }
+
+        if (!raw.length) {
+          const paged = await getProductsPaged(0, 20);
+          raw = Array.isArray(paged?.data?.content) ? paged.data.content : [];
+        }
+
+        const normalized = raw
+          .map(normalizeProduct)
+          .filter((p) => p.id && p.id !== product.id);
+
+        const deduped = [];
+        const seen = new Set();
+        for (const p of normalized) {
+          if (seen.has(p.id)) continue;
+          seen.add(p.id);
+          deduped.push(p);
+        }
+
+        deduped.sort((a, b) => {
+          const scoreA = Number(a.brand && a.brand === product.brand);
+          const scoreB = Number(b.brand && b.brand === product.brand);
+          return scoreB - scoreA;
+        });
+
+        if (!cancelled) {
+          setRelatedProducts(deduped.slice(0, 4));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.log("load related products error", error?.message || error);
+          setRelatedProducts([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setRelatedLoading(false);
+        }
+      }
+    };
+
+    loadRelatedProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product.id, product.category, product.brand]);
+
+  useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [product.id]);
 
   const toggleCombo = (id) => {
     setCombos(prev => prev.map(item =>
@@ -207,6 +302,33 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
   const handleBuyNow = () => {
     navigation.navigate("Checkout", { product });
+  };
+
+  const handleVideoReview = async () => {
+    const query = encodeURIComponent(`${product.name} review`);
+    const appUrl = `youtube://www.youtube.com/results?search_query=${query}`;
+    const webUrl = `https://www.youtube.com/results?search_query=${query}`;
+
+    try {
+      const canOpenApp = await Linking.canOpenURL(appUrl);
+      if (canOpenApp) {
+        await Linking.openURL(appUrl);
+        return;
+      }
+      await Linking.openURL(webUrl);
+    } catch (error) {
+      console.log("open video review error", error?.message || error);
+      await Linking.openURL(webUrl);
+    }
+  };
+
+  const handleComparisonToggle = () => {
+    const inComparison = isInComparison(product.id);
+    if (inComparison) {
+      removeFromComparison(product.id);
+    } else {
+      addToComparison(product);
+    }
   };
 
   const handlePrevImage = () => {
@@ -238,17 +360,24 @@ const ProductDetailScreen = ({ route, navigation }) => {
         <Text style={styles.headerTitle} numberOfLines={1}>
           Thông tin sản phẩm
         </Text>
-        <TouchableOpacity
-          style={styles.headerCartBtn}
-          onPress={() => navigation.navigate("Main", { screen: "Cart" })}
-        >
-          <Text style={styles.headerBtnIcon}>🛒</Text>
+        <View style={styles.headerRightGroup}>
+          {isInComparison(product.id) && (
+            <View style={styles.comparisonBadgeSmall}>
+              <Text style={styles.comparisonBadgeText}>✓ Đã thêm so sánh</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.headerCartBtn}
+            onPress={() => navigation.navigate("Main", { screen: "Cart" })}
+          >
+            <Text style={styles.headerBtnIcon}>🛒</Text>
           {totalItems > 0 && (
             <View style={styles.cartBadge}>
               <Text style={styles.cartBadgeText}>{totalItems}</Text>
             </View>
           )}
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -312,15 +441,20 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
           {/* Action buttons */}
           <View style={styles.actionButtonsRow}>
-            <TouchableOpacity style={styles.actionBtn}>
+            <TouchableOpacity style={styles.actionBtn} onPress={handleVideoReview}>
               <View style={styles.videoIconBox}>
                 <Ionicons name="play" size={14} color="#FFFFFF" style={styles.videoPlay} />
               </View>
               <Text style={styles.actionLabel}>Video review</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn}>
-              <Feather name="plus-square" size={22} color={ACTION_ICON_BLUE} />
-              <Text style={styles.actionLabel}>So sánh</Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, isInComparison(product.id) && styles.actionBtnActive]}
+              onPress={handleComparisonToggle}
+            >
+              <Text style={{ fontSize: 22 }}>⚖️</Text>
+              <Text style={[styles.actionLabel, isInComparison(product.id) && styles.actionLabelActive]}>
+                {isInComparison(product.id) ? "Đã thêm so sánh" : "So sánh"}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn}>
               <Ionicons name="heart-outline" size={25} color="#F97316" />
@@ -523,13 +657,28 @@ const ProductDetailScreen = ({ route, navigation }) => {
         {/* Sản phẩm tương tự */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sản phẩm tương tự</Text>
-          <View style={styles.relatedGrid}>
-            {RELATED.map(item => <RelatedCard key={item.id} item={item} />)}
-          </View>
+          {relatedLoading ? (
+            <View style={styles.relatedStateBox}>
+              <ActivityIndicator size="small" color={ORANGE} />
+              <Text style={styles.relatedStateText}>Đang tải sản phẩm tương tự...</Text>
+            </View>
+          ) : relatedProducts.length > 0 ? (
+            <View style={styles.relatedGrid}>
+              {relatedProducts.map((item) => (
+                <RelatedCard key={item.id} item={item} navigation={navigation} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.relatedStateBox}>
+              <Text style={styles.relatedStateText}>Chưa có sản phẩm tương tự.</Text>
+            </View>
+          )}
         </View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <ComparisonDock navigation={navigation} />
     </SafeAreaView>
   );
 };
@@ -555,6 +704,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   headerBtn:     { padding: 4 },
+  headerRightGroup: { flexDirection: "row", alignItems: "center", gap: 8 },
+  comparisonBadgeSmall: { backgroundColor: "#1976d2", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, maxWidth: 130 },
+  comparisonBadgeText: { color: "#fff", fontSize: 10, fontWeight: "600" },
   headerCartBtn: { padding: 4, position: "relative" },
   headerBtnIcon: { fontSize: 28, color: "#1a1a1a", lineHeight: 30 },
   headerTitle: {
@@ -625,10 +777,12 @@ const styles = StyleSheet.create({
     borderTopColor: "#F0F0F0",
     paddingTop: 10,
   },
-  actionBtn:    { flex: 1, alignItems: "center", gap: 6, paddingVertical: 8 },
+  actionBtn:    { flex: 1, alignItems: "center", gap: 6, paddingVertical: 8, borderRadius: 6 },
+  actionBtnActive: { backgroundColor: "#e3f2fd" },
   videoIconBox: { width: 42, height: 28, borderRadius: 6, backgroundColor: "#FF1F1F", alignItems: "center", justifyContent: "center" },
   videoPlay:    { marginLeft: 2 },
   actionLabel:  { fontSize: 12, color: "#4B5563", textAlign: "center" },
+  actionLabelActive: { color: "#1976d2", fontWeight: "600" },
 
   dividerTop: { height: 8, backgroundColor: "#F2F2F2" },
   container:  { flex: 1, backgroundColor: "#F2F2F2" },
@@ -741,9 +895,12 @@ const styles = StyleSheet.create({
   relatedImageBox:     { backgroundColor: "#F5F5F5", height: 100, alignItems: "center", justifyContent: "center", position: "relative" },
   smallDiscountBadge:  { position: "absolute", top: 6, left: 6, backgroundColor: ORANGE, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 },
   smallDiscountBadgeText: { fontSize: 10, color: "#FFFFFF", fontWeight: "600" },
-  relatedEmoji:  { fontSize: 32 },
+  relatedImage:  { width: "92%", height: "92%" },
+  relatedImagePlaceholder: { fontSize: 28, color: "#9CA3AF" },
   relatedBody:   { padding: 8 },
   relatedName:   { fontSize: 11, color: TEXT_MAIN, lineHeight: 16, marginBottom: 5 },
   relatedPrice:  { fontSize: 13, color: ORANGE, fontWeight: "600" },
+  relatedStateBox: { alignItems: "center", justifyContent: "center", paddingVertical: 16, gap: 8 },
+  relatedStateText: { color: TEXT_MUTED, fontSize: 12 },
   btnDisabled:   { backgroundColor: "#ccc" },
 });
