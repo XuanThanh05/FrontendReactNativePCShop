@@ -8,7 +8,7 @@ import axios from "axios";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://172.17.x.x:8080/api",
+  baseURL: "http://192.168.x.x:8080/api",
   headers: {
     "Content-Type": "application/json",
   },

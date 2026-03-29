@@ -14,10 +14,11 @@ const CartItem = ({ item }) => {
   const {
     increaseQuantity,
     decreaseQuantity,
-    removeFromCartWithConfirm,   // ← Dùng cho icon thùng rác
+    removeFromCartWithConfirm,
     toggleSelect,
   } = useCart();
 
+  // ✅ Giảm số lượng — nếu còn 1 thì hỏi xóa
   const handleDecrease = () => {
     if (item.quantity === 1) {
       Alert.alert(
@@ -28,13 +29,25 @@ const CartItem = ({ item }) => {
           {
             text: "Xóa",
             style: "destructive",
-            onPress: () => removeFromCartWithConfirm(item.id), // Dùng hàm có confirm
+            onPress: () => removeFromCartWithConfirm(item.id),
           },
-        ],
+        ]
       );
     } else {
       decreaseQuantity(item.id);
     }
+  };
+
+  // ✅ Tăng số lượng — kiểm tra stock, hiện Alert nếu vượt giới hạn
+  const handleIncrease = () => {
+    if (item.quantity >= item.stock) {
+      Alert.alert(
+        "Không thể thêm",
+        `"${item.name}" chỉ còn ${item.stock} sản phẩm trong kho.\nBạn đã đạt giới hạn số lượng có thể mua.`
+      );
+      return;
+    }
+    increaseQuantity(item.id);
   };
 
   return (
@@ -69,10 +82,10 @@ const CartItem = ({ item }) => {
       <View style={styles.info}>
         <View style={styles.topInfoRow}>
           <Text style={styles.brand}>{item.brand}</Text>
-          
+
           {/* Nút xóa - icon thùng rác */}
           <TouchableOpacity
-            onPress={() => removeFromCartWithConfirm(item.id)}   // ← ĐÃ SỬA Ở ĐÂY
+            onPress={() => removeFromCartWithConfirm(item.id)}
             style={styles.deleteBtn}
           >
             <Ionicons name="trash-outline" size={18} color="#999" />
@@ -96,15 +109,20 @@ const CartItem = ({ item }) => {
               <Ionicons name="remove" size={16} color="#333" />
             </TouchableOpacity>
             <Text style={styles.quantity}>{item.quantity}</Text>
+
+            {/* ✅ Nút + luôn pressable để có thể hiện Alert khi hết stock */}
             <TouchableOpacity
-              onPress={() => increaseQuantity(item.id)}
+              onPress={handleIncrease}
               style={[
                 styles.qtyBtn,
                 item.quantity >= item.stock && styles.qtyBtnDisabled,
               ]}
-              disabled={item.quantity >= item.stock}
             >
-              <Ionicons name="add" size={16} color="#333" />
+              <Ionicons
+                name="add"
+                size={16}
+                color={item.quantity >= item.stock ? "#ccc" : "#333"}
+              />
             </TouchableOpacity>
           </View>
         </View>

@@ -159,15 +159,12 @@ export const CartProvider = ({ children }) => {
       'Xóa sản phẩm',
       `Bạn có chắc muốn xóa "${item.name}" khỏi giỏ hàng không?`,
       [
-        { 
-          text: 'Hủy', 
-          style: 'cancel' 
-        },
+        { text: 'Hủy', style: 'cancel' },
         {
           text: 'Xóa',
           style: 'destructive',
-          onPress: () => removeFromCart(cartItemId)
-        }
+          onPress: () => removeFromCart(cartItemId),
+        },
       ]
     );
   };
@@ -193,6 +190,19 @@ export const CartProvider = ({ children }) => {
     if (!isLoggedIn) {
       try {
         const existing = cartItems.find(i => i.productId === product.id);
+
+        // ✅ Kiểm tra stock trước khi thêm (guest)
+        if (existing) {
+          const stock = product.stock ?? product.stockQuantity ?? 999;
+          if (existing.quantity >= stock) {
+            Alert.alert(
+              'Không thể thêm',
+              `"${product.name}" chỉ còn ${stock} sản phẩm trong kho.\nBạn đã có ${existing.quantity} sản phẩm trong giỏ hàng.`
+            );
+            return;
+          }
+        }
+
         let newItems;
         if (existing) {
           newItems = cartItems.map(i =>
@@ -206,12 +216,12 @@ export const CartProvider = ({ children }) => {
             productId: product.id,
             quantity: 1,
             selected: true,
-            name: product.name ?? '',
-            brand: product.brand ?? '',
-            price: product.price ?? product.productPrice ?? 0,
-            image: product.image ?? product.imageUrl ?? product.productImageUrl ?? '',
-            stock: product.stock ?? product.stockQuantity ?? 999,
-            specs: product.description ?? product.specs ?? '',
+            name:     product.name ?? '',
+            brand:    product.brand ?? '',
+            price:    product.price ?? product.productPrice ?? 0,
+            image:    product.image ?? product.imageUrl ?? product.productImageUrl ?? '',
+            stock:    product.stock ?? product.stockQuantity ?? 999,
+            specs:    product.description ?? product.specs ?? '',
             discount: product.discount ?? 0,
             subtotal: (product.price ?? product.productPrice ?? 0) * 1,
           };
@@ -226,7 +236,20 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
+    // ✅ Kiểm tra stock trước khi thêm (logged-in, dùng cartItems state hiện tại)
     try {
+      const existing = cartItems.find(i => i.productId === product.id);
+      if (existing) {
+        const stock = existing.stock ?? 999;
+        if (existing.quantity >= stock) {
+          Alert.alert(
+            'Không thể thêm',
+            `"${product.name}" chỉ còn ${stock} sản phẩm trong kho.\nBạn đã có ${existing.quantity} sản phẩm trong giỏ hàng.`
+          );
+          return;
+        }
+      }
+
       await apiAddToCart({ productId: product.id, quantity: 1 });
       await fetchCart();
       showToast(`✓ Đã thêm "${product.name}" vào giỏ hàng`);
@@ -239,7 +262,11 @@ export const CartProvider = ({ children }) => {
   // ==================== INCREASE QUANTITY ====================
   const increaseQuantity = async (cartItemId) => {
     const item = cartItems.find(i => i.id === cartItemId);
-    if (!item || item.quantity >= item.stock) return;
+    if (!item) return;
+
+    // ✅ Kiểm tra stock — đã chặn ở CartItem nhưng double-check ở đây
+    if (item.quantity >= item.stock) return;
+
     const newQty = item.quantity + 1;
 
     if (isLoggedIn) {
@@ -334,8 +361,8 @@ export const CartProvider = ({ children }) => {
       selectedItems,
       loading,
       addToCart,
-      removeFromCart,               // hàm xóa trực tiếp (nếu cần dùng chỗ khác)
-      removeFromCartWithConfirm,    // ← DÙNG CHO ICON THÙNG RÁC
+      removeFromCart,
+      removeFromCartWithConfirm,
       increaseQuantity,
       decreaseQuantity,
       toggleSelect,
