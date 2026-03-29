@@ -1,6 +1,7 @@
 // src/screens/CheckoutScreen.js
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
     Alert,
     Image,
     ScrollView,
@@ -11,15 +12,19 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+  import * as Location from "expo-location";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { calculateShipping } from "../services/api";
 
 const CheckoutScreen = ({ route, navigation }) => {
   const { product } = route.params || {};
   const { currentUser } = useAuth();
   const { selectedItems, totalPrice, clearCart } = useCart();
+  const selectedStoreFromMap = route.params?.selectedStoreFromMap;
+  const selectedUserLocationFromMap = route.params?.selectedUserLocationFromMap;
 
   const checkoutItems = product ? [{ ...product, quantity: 1 }] : selectedItems;
 
@@ -34,9 +39,122 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
+  const [selectedStore, setSelectedStore] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [shippingInfo, setShippingInfo] = useState(null);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
+  const [deliveryError, setDeliveryError] = useState("");
 
-  const shippingFee = deliveryType === "ship" ? 50000 : 0;
+  useEffect(() => {
+    if (!selectedStoreFromMap) return;
+
+    setSelectedStore(selectedStoreFromMap);
+    setSelectedLocation(selectedUserLocationFromMap || null);
+    setDelivery("ship");
+  }, [selectedStoreFromMap, selectedUserLocationFromMap]);
+
+  useEffect(() => {
+    if (!selectedLocation) return;
+
+    let cancelled = false;
+    setReverseGeocoding(true);
+
+    (async () => {
+      try {
+        const places = await Location.reverseGeocodeAsync({
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+        });
+
+        if (cancelled) return;
+        const place = places?.[0];
+        if (!place) {
+          setReverseGeocoding(false);
+          return;
+        }
+
+        // Prefer province/city-level name first (e.g. "Hà Nội") instead of smaller subregions.
+        const inferredCity = place.region || place.city || place.subregion || "";
+        const inferredDistrict = place.district || place.subregion || "";
+        const inferredAddress = [place.name, place.street].filter(Boolean).join(", ");
+
+        if (inferredCity) setCity(inferredCity);
+        if (inferredDistrict) setDistrict(inferredDistrict);
+        if (inferredAddress) setAddress(inferredAddress);
+      } catch (e) {
+        if (!cancelled) {
+          console.log("reverse geocode checkout error", e?.message || e);
+        }
+      } finally {
+        if (!cancelled) setReverseGeocoding(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLocation]);
+
+  useEffect(() => {
+    if (deliveryType !== "ship" || !selectedLocation) {
+      return;
+    }
+
+    let cancelled = false;
+    setDeliveryLoading(true);
+    setDeliveryError("");
+    setShippingInfo(null);
+
+    calculateShipping({
+      latitude: selectedLocation.latitude,
+      longitude: selectedLocation.longitude,
+    })
+      .then((shippingRes) => {
+        if (cancelled) return;
+        setShippingInfo(shippingRes.data || null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.log("checkout delivery calc error", err?.response?.data || err.message);
+        setDeliveryError("Không thể tính phí giao hàng lúc này. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (!cancelled) setDeliveryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deliveryType, selectedLocation]);
+
+  const handleChangeDeliveryType = (type) => {
+    setDelivery(type);
+
+    if (type === "ship") {
+      navigation.navigate("StoreMap", {
+        selectMode: true,
+        checkoutContext: { product },
+      });
+      return;
+    }
+
+    setDeliveryError("");
+  };
+
+  const handlePickStoreOnMap = () => {
+    navigation.navigate("StoreMap", {
+      selectMode: true,
+      checkoutContext: { product },
+    });
+  };
+
+  const shippingFee = deliveryType === "ship" ? Number(shippingInfo?.fee || 0) : 0;
   const finalTotal = subtotal + shippingFee;
+  const deliverySummary = (() => {
+    if (!shippingInfo) return null;
+    return `${shippingInfo.zone} · ${shippingInfo.distanceKm} km · ${shippingInfo.estimatedDays} ngày`;
+  })();
 
   // ── Validate ─────────────────────────────────────────────────
   const validate = () => {
@@ -53,12 +171,20 @@ const CheckoutScreen = ({ route, navigation }) => {
       return false;
     }
     if (deliveryType === "ship") {
+      if (!selectedStore || !selectedLocation) {
+        Alert.alert("Chưa chọn cửa hàng", "Vui lòng chọn cửa hàng gần bạn trên bản đồ trước.");
+        return false;
+      }
       if (!city.trim()) {
         Alert.alert("Thiếu thông tin", "Vui lòng nhập tỉnh/thành phố");
         return false;
       }
       if (!address.trim()) {
         Alert.alert("Thiếu thông tin", "Vui lòng nhập địa chỉ cụ thể");
+        return false;
+      }
+      if (!shippingInfo) {
+        Alert.alert("Chưa tính được phí", "Vui lòng đợi hệ thống tính phí giao hàng.");
         return false;
       }
     }
@@ -72,7 +198,7 @@ const CheckoutScreen = ({ route, navigation }) => {
     const deliveryInfo =
       deliveryType === "store"
         ? "Nhận tại cửa hàng PCShop"
-        : `Giao đến: ${address}${district ? ", " + district : ""}, ${city}`;
+        : `Từ ${selectedStore?.name || "cửa hàng gần bạn"} giao đến: ${address}${district ? ", " + district : ""}, ${city}`;
 
     Alert.alert(
       "Xác nhận đặt hàng",
@@ -88,7 +214,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                 index: 1,
                 routes: [
                   { name: "Main" },
-                  { name: "OrderSuccess", params: { buyerName, buyerPhone } },
+                  { name: "OrderTracking", params: { orderId: 2 } },
                 ],
               });
             }, 300);
@@ -234,7 +360,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                 styles.toggleBtn,
                 deliveryType === "store" && styles.toggleActive,
               ]}
-              onPress={() => setDelivery("store")}
+              onPress={() => handleChangeDeliveryType("store")}
             >
               <Text
                 style={[
@@ -250,7 +376,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                 styles.toggleBtn,
                 deliveryType === "ship" && styles.toggleActive,
               ]}
-              onPress={() => setDelivery("ship")}
+              onPress={() => handleChangeDeliveryType("ship")}
             >
               <Text
                 style={[
@@ -284,6 +410,35 @@ const CheckoutScreen = ({ route, navigation }) => {
           {/* Giao tận nơi */}
           {deliveryType === "ship" && (
             <View>
+              {!!selectedStore && (
+                <View style={styles.nearestStoreBox}>
+                  <Text style={styles.nearestStoreTitle}>🏪 Cửa hàng gần bạn nhất</Text>
+                  <Text style={styles.nearestStoreName}>{selectedStore.name}</Text>
+                  <Text style={styles.nearestStoreAddress}>{selectedStore.address}</Text>
+                  <Text style={styles.nearestStoreDistance}>Khoảng cách: {selectedStore.distanceKm} km</Text>
+                </View>
+              )}
+
+              <TouchableOpacity style={styles.mapPickBtn} onPress={handlePickStoreOnMap}>
+                <Text style={styles.mapPickBtnText}>
+                  {selectedStore ? "Đổi cửa hàng trên bản đồ" : "Chọn cửa hàng trên bản đồ"}
+                </Text>
+              </TouchableOpacity>
+
+              {reverseGeocoding && (
+                <View style={styles.loadingBox}>
+                  <ActivityIndicator size="small" color="#E53935" />
+                  <Text style={styles.loadingText}>Đang điền địa chỉ từ định vị...</Text>
+                </View>
+              )}
+
+              {deliveryLoading && (
+                <View style={styles.loadingBox}>
+                  <ActivityIndicator size="small" color="#E53935" />
+                  <Text style={styles.loadingText}>Đang tính phí giao hàng...</Text>
+                </View>
+              )}
+
               <Text style={styles.fieldLabel}>
                 {"Tỉnh / Thành phố "}
                 <Text style={styles.required}>*</Text>
@@ -326,9 +481,15 @@ const CheckoutScreen = ({ route, navigation }) => {
               <View style={styles.shippingFeeNote}>
                 <Text style={styles.shippingFeeText}>🚚 Phí vận chuyển: </Text>
                 <Text style={styles.shippingFeeValue}>
-                  {formatPrice(50000)}
+                  {shippingInfo ? formatPrice(shippingFee) : "Đang tính..."}
                 </Text>
               </View>
+
+              {deliverySummary && (
+                <Text style={styles.shippingSummaryText}>Lộ trình giao hàng: {deliverySummary}</Text>
+              )}
+
+              {!!deliveryError && <Text style={styles.deliveryErrorText}>{deliveryError}</Text>}
             </View>
           )}
         </View>
@@ -374,6 +535,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         <TouchableOpacity
           style={styles.orderBtn}
           onPress={handleOrder}
+          disabled={deliveryType === "ship" && (deliveryLoading || !shippingInfo || !selectedStore)}
           activeOpacity={0.85}
         >
           <Text style={styles.orderBtnText}>Đặt hàng</Text>
@@ -537,6 +699,51 @@ const styles = StyleSheet.create({
   },
   shippingFeeText: { fontSize: 13, color: "#555" },
   shippingFeeValue: { fontSize: 13, color: "#43A047", fontWeight: "700" },
+  shippingSummaryText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "600",
+  },
+  loadingBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  loadingText: { fontSize: 12, color: "#666" },
+  nearestStoreBox: {
+    backgroundColor: "#FFF5F5",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#FFD5D5",
+    marginBottom: 8,
+  },
+  nearestStoreTitle: { fontSize: 12, color: "#444", fontWeight: "700" },
+  nearestStoreName: { marginTop: 4, fontSize: 13, color: "#1a1a1a", fontWeight: "800" },
+  nearestStoreAddress: { marginTop: 2, fontSize: 12, color: "#666" },
+  nearestStoreDistance: { marginTop: 2, fontSize: 12, color: "#E53935", fontWeight: "700" },
+  mapPickBtn: {
+    borderWidth: 1.5,
+    borderColor: "#E53935",
+    borderRadius: 10,
+    alignItems: "center",
+    paddingVertical: 11,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+  },
+  mapPickBtnText: {
+    color: "#E53935",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  deliveryErrorText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#D32F2F",
+    fontWeight: "600",
+  },
 
   summaryRow: {
     flexDirection: "row",

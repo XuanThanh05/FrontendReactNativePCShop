@@ -18,6 +18,9 @@ import LoginScreen from "../screens/LoginScreen";
 import OrderSuccessScreen from "../screens/OrderSuccessScreen";
 import ProductDetailScreen from "../screens/ProductDetailScreen";
 import RegisterScreen from "../screens/RegisterScreen";
+import ShippingCalculatorScreen from "../screens/ShippingCalculatorScreen";
+import StoreMapScreen from "../screens/StoreMapScreen";
+import OrderTrackingScreen from "../screens/OrderTrackingScreen";
 import UserStatisticsReport from "../screens/UserStatisticsReport";
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -152,6 +155,9 @@ const AppNavigator = () => {
               name="UserStatisticsReport"
               component={UserStatisticsReport}
             />
+            <Stack.Screen name="StoreMap" component={StoreMapScreen} />
+            <Stack.Screen name="ShippingCalculator" component={ShippingCalculatorScreen} />
+            <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </CartProvider>

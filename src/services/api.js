@@ -8,7 +8,7 @@ import axios from "axios";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://192.168.x.x:8080/api",
+  baseURL: "http://192.168.10.104:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -88,4 +88,18 @@ export const getTopByCategory = (category) =>
 // Lấy sản phẩm theo category (đã có, nhưng thêm filter brand + price)
 export const getProductsByCategoryFiltered = (category, brand, minPrice, maxPrice) =>
   API.get(`/products/category/${category}`, { params: { brand, minPrice, maxPrice } });
+
+// ========== MAP / SHIPPING / TRACKING API ==========
+export const getNearbyStores = (lat, lon, radius = 20) =>
+  API.get("/stores/nearby", { params: { lat, lon, radius } });
+
+export const calculateShipping = (location) =>
+  API.post("/shipping/calculate", location);
+
+export const getOrderTracking = (orderId) =>
+  API.get(`/orders/${orderId}/tracking`);
+
+export const updateShipperLocation = (orderId, location) =>
+  API.put(`/orders/${orderId}/shipper-location`, location);
+
 export default API;
