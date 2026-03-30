@@ -50,6 +50,17 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [storeLoading, setStoreLoading] = useState(false);
 
   useEffect(() => {
+    if (!currentUser) return;
+    setBuyerName(currentUser?.fullName || currentUser?.username || "");
+    setBuyerPhone(currentUser?.phone || "");
+    setEmail(currentUser?.email || "");
+
+    if (!address?.trim() && currentUser?.address) {
+      setAddress(currentUser.address);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!selectedStoreFromMap) return;
 
     setSelectedStore(selectedStoreFromMap);

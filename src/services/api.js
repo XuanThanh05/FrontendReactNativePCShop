@@ -7,14 +7,11 @@ import axios from "axios";
 // Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10) 
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
-const API_BASE_URL = "http://161.118.200.236/api";
-
 const API = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: "http://192.168.10.103:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
 });
 
 // Gắn token vào header nếu có
@@ -35,19 +32,13 @@ API.interceptors.request.use(async (config) => {
   return config;
 });
 
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const status = error?.response?.status;
-    const requestUrl = `${error?.config?.baseURL || ""}${error?.config?.url || ""}`;
-    console.log("API error:", { status, requestUrl, message: error?.message });
-    return Promise.reject(error);
-  }
-);
-
 // API login
 export const loginApi = (data) => {
   return API.post("/auth/login", data);
+};
+
+export const getAuthMe = () => {
+  return API.get("/auth/me");
 };
 // Lấy sản phẩm có phân trang
 export const getProductsPaged = (page = 0, size = 10) => {
@@ -101,6 +92,16 @@ export const getTopByCategory = (category) =>
 // Lấy sản phẩm theo category (đã có, nhưng thêm filter brand + price)
 export const getProductsByCategoryFiltered = (category, brand, minPrice, maxPrice) =>
   API.get(`/products/category/${category}`, { params: { brand, minPrice, maxPrice } });
+
+// ========== PRODUCT REVIEWS API ==========
+export const getProductReviewSummary = (productId) =>
+  API.get(`/products/${productId}/reviews/summary`);
+
+export const getProductReviews = (productId, page = 0, size = 5) =>
+  API.get(`/products/${productId}/reviews`, { params: { page, size } });
+
+export const submitProductReview = (productId, payload) =>
+  API.post(`/products/${productId}/reviews`, payload);
 
 // ========== MAP / SHIPPING / TRACKING API ==========
 export const getNearbyStores = (lat, lon, radius = 20) =>
