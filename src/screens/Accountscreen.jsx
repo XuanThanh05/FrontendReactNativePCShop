@@ -33,6 +33,10 @@ const MenuSection = ({ title, children }) => (
 
 const AccountScreen = ({ navigation }) => {
   const { currentUser, isLoggedIn, logout } = useAuth();
+  const displayName =
+    currentUser?.fullName || currentUser?.username || currentUser?.name || "bạn";
+  const displayContact =
+    currentUser?.phone || currentUser?.email || "Cảm ơn bạn đã quay lại PCShop.";
 
   const handleLogout = async () => {
     await logout();
@@ -57,12 +61,12 @@ const AccountScreen = ({ navigation }) => {
           <View style={styles.welcomeInfo}>
             <Text style={styles.welcomeTitle}>
               {isLoggedIn
-                ? `Chào ${currentUser.fullName}`
+                ? `Chào ${displayName}`
                 : "Chào mừng bạn đến với PCShop"}
             </Text>
             <Text style={styles.welcomeSub}>
               {isLoggedIn
-                ? currentUser.phone
+                ? displayContact
                 : "Đăng nhập để không bỏ lỡ các ưu đãi hấp dẫn."}
             </Text>
           </View>
