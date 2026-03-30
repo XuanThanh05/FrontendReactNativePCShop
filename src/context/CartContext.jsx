@@ -135,16 +135,56 @@ export const CartProvider = ({ children }) => {
         try {
           const localItems = await loadGuestCart();
           if (localItems.length > 0) {
+            let syncedCount = 0;
+            let skippedCount = 0;
+
             for (const item of localItems) {
-              if (item.productId) {
-                await apiAddToCart({ productId: item.productId, quantity: item.quantity });
+              // ✅ Convert string values to integers (from AsyncStorage)
+              const productId = parseInt(item.productId, 10);
+              const quantity = parseInt(item.quantity, 10);
+
+              // ✅ Validate data
+              if (!isNaN(productId) && !isNaN(quantity) && quantity >= 1) {
+                const payload = { productId, quantity };
+                console.log('Syncing cart item:', payload);
+                try {
+                  await apiAddToCart(payload);
+                  syncedCount++;
+                } catch (itemErr) {
+                  // ✅ Nếu item bị lỗi (ví dụ stock không đủ), skip item này
+                  console.warn('Failed to sync item:', {
+                    productId,
+                    quantity,
+                    error: itemErr?.response?.data?.error || itemErr?.message,
+                  });
+                  skippedCount++;
+                  // Tiếp tục sync item tiếp theo thay vì dừng ngay
+                }
+              } else {
+                console.warn('Skipping invalid cart item:', item);
+                skippedCount++;
               }
             }
+
             await clearGuestCart();
-            showToast('✅ Giỏ hàng tạm thời đã được đồng bộ vào tài khoản');
+
+            // ✅ Hiển thị kết quả chi tiết
+            if (syncedCount > 0) {
+              const msg = skippedCount > 0
+                ? `✅ Đã đồng bộ ${syncedCount} sản phẩm (${skippedCount} sản phẩm bị vượt quá tồn kho)`
+                : `✅ Giỏ hàng tạm thời đã được đồng bộ vào tài khoản`;
+              showToast(msg);
+            } else if (skippedCount > 0) {
+              showToast('ℹ️ Không thể đồng bộ vì tồn kho không đủ');
+            }
           }
         } catch (err) {
-          console.error('syncOnLogin error:', err);
+          console.error('syncOnLogin error:', {
+            status: err?.response?.status,
+            data: err?.response?.data,
+            message: err?.message,
+          });
+          showToast('Đồng bộ giỏ hàng thất bại');
         } finally {
           fetchCart();
         }

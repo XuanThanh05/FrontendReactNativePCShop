@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://192.168.2.15:8080/api",
+  baseURL: "http://192.168.76.151:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
