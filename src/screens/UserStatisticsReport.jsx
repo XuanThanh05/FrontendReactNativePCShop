@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   ScrollView,
@@ -9,47 +10,45 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { formatPrice, hotProducts } from "../constants/mockData";
+import { formatPrice } from "../constants/mockData";
+import { getUserOrders } from "../services/api";
 
 const UserStatisticsReport = ({ navigation }) => {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Tháng 3/2026 (0-indexed)
+  const [currentDate, setCurrentDate] = useState(new Date());
 
-  const purchaseHistory = useMemo(() => {
-    if (!hotProducts || hotProducts.length < 5) return [];
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    return [
-      {
-        ...hotProducts[0],
-        date: "15/03/2026",
-        status: "Đã giao",
-      },
-      {
-        ...hotProducts[4],
-        date: "18/03/2026",
-        status: "Đang giao",
-      },
-      {
-        ...hotProducts[1],
-        date: "10/02/2026",
-        status: "Đã giao",
-      },
-      {
-        ...hotProducts[3],
-        date: "02/02/2026",
-        status: "Đã giao",
-      },
-      {
-        ...hotProducts[5],
-        date: "05/01/2026",
-        status: "Đã giao",
-      },
-      {
-        ...hotProducts[6],
-        date: "20/12/2025",
-        status: "Đã giao",
-      },
-    ];
-  }, [hotProducts]);
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const res = await getUserOrders();
+      const mappedOrders = (res.data || []).map(order => {
+        const firstItem = order.items && order.items.length > 0 ? order.items[0] : {};
+        const extraCount = order.totalItemsCount > 1 ? order.totalItemsCount - 1 : 0;
+
+        return {
+          id: order.id?.toString() || Math.random().toString(),
+          price: order.totalAmount ?? 0,
+          date: order.formattedDate || "15/03/2026", // Dùng trường ngày tháng đã format từ backend
+          status: order.status === "PENDING" ? "Đang giao" : (order.status || "Đã giao"),
+          name: firstItem.productName || `Đơn hàng #${order.id || ''}`,
+          image: firstItem.productImageUrl || "https://via.placeholder.com/150",
+          extraCount: extraCount,
+          discount: 0
+        };
+      });
+      setPurchaseHistory(mappedOrders);
+    } catch (error) {
+      console.error("Lỗi lấy lịch sử mua hàng:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const monthString = `${String(currentDate.getMonth() + 1).padStart(2, "0")}/${currentDate.getFullYear()}`;
 
@@ -98,6 +97,11 @@ const UserStatisticsReport = ({ navigation }) => {
         <Text style={styles.productName} numberOfLines={2}>
           {item.name}
         </Text>
+        {item.extraCount > 0 && (
+          <Text style={{fontSize: 12, color: '#6B7280', marginBottom: 4, fontStyle: 'italic', fontWeight: "500"}}>
+            + {item.extraCount} sản phẩm khác
+          </Text>
+        )}
         <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
       </View>
     </View>
@@ -159,7 +163,9 @@ const UserStatisticsReport = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-          {filteredHistory.length > 0 ? (
+          {loading ? (
+            <ActivityIndicator size="large" color="#D70018" style={{ marginTop: 20 }} />
+          ) : filteredHistory.length > 0 ? (
             <View style={styles.cardList}>
               <FlatList
                 data={filteredHistory}
@@ -170,7 +176,7 @@ const UserStatisticsReport = ({ navigation }) => {
             </View>
           ) : (
             <View style={[styles.cardList, styles.emptyContainer]}>
-              <Text style={styles.emptyText}>Chưa có đơn hàng nào.</Text>
+              <Text style={styles.emptyText}>Chưa có đơn hàng nào trong tháng {monthString}.</Text>
             </View>
           )}
         </View>

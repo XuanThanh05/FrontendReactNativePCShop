@@ -6,7 +6,6 @@ import axios from "axios";
 // iOS Simulator → localhost
 // Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10) 
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
-// http://161.118.200.236/api
 
 const API_BASE_URL = "http://161.118.200.236/api";
 
@@ -82,16 +81,16 @@ export const removeCartItem = (cartItemId) =>
 export const clearCart = () => API.delete("/cart");
 
 // ========== STATISTICS API ==========
-export const getSummaryStatistics = () => 
+export const getSummaryStatistics = () =>
   API.get("/admin/statistics/summary");
 
-export const getOrderStatusDistribution = () => 
+export const getOrderStatusDistribution = () =>
   API.get("/admin/statistics/order-status");
 
-export const getTopProducts = () => 
+export const getTopProducts = () =>
   API.get("/admin/statistics/top-products");
 
-export const getWarehouseReport = () => 
+export const getWarehouseReport = () =>
   API.get("/admin/statistics/warehouse-report");
 export const getCategories = () => API.get("/products/categories");
 
@@ -115,5 +114,7 @@ export const getOrderTracking = (orderId) =>
 
 export const updateShipperLocation = (orderId, location) =>
   API.put(`/orders/${orderId}/shipper-location`, location);
+
+export const getUserOrders = () => API.get("/orders/my-orders");
 
 export default API;
