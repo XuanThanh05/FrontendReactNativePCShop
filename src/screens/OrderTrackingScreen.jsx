@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getOrderTracking } from "../services/api";
+import { getMyOrderHistory, getOrderTracking } from "../services/api";
 import { COLORS, GOONG_API_KEY } from "../constants/mapTheme";
 
 let MapsModule = null;
 try {
   MapsModule = require("react-native-maps");
-} catch (e) {
+} catch (_e) {
   MapsModule = null;
 }
 
@@ -73,10 +73,27 @@ const OrderTrackingScreen = ({ route }) => {
   const routeOrderId = route?.params?.orderId;
   const [orderId, setOrderId] = useState(null);
   const [tracking, setTracking] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [routeEtaText, setRouteEtaText] = useState(null);
   const [loading, setLoading] = useState(true);
   const timerRef = useRef(null);
+  const fallbackTriedRef = useRef(false);
+
+  const resolveLatestOrderIdFromHistory = useCallback(async () => {
+    try {
+      const historyRes = await getMyOrderHistory();
+      const rows = Array.isArray(historyRes?.data) ? historyRes.data : [];
+      const latestOrderId = Number(rows?.[0]?.orderId);
+      if (Number.isFinite(latestOrderId) && latestOrderId > 0) {
+        await AsyncStorage.setItem("lastTrackingOrderId", String(latestOrderId));
+        return latestOrderId;
+      }
+    } catch (e) {
+      console.log("resolve latest order id error", e?.response?.data || e?.message || e);
+    }
+    return null;
+  }, []);
 
   const getGoongRoute = async (origin, destination) => {
     if (!GOONG_API_KEY) {
@@ -104,20 +121,42 @@ const OrderTrackingScreen = ({ route }) => {
     };
   };
 
-  const fetchTracking = async () => {
+  const fetchTracking = useCallback(async () => {
     try {
       const response = await getOrderTracking(orderId);
       setTracking(response.data);
+      setLoadError("");
       setLoading(false);
+      fallbackTriedRef.current = false;
 
       if (response.data?.status === "DELIVERED" && timerRef.current) {
         clearInterval(timerRef.current);
       }
     } catch (e) {
       console.log("get tracking error", e?.response?.data || e.message);
+      const status = e?.response?.status;
+
+      if (status === 404) {
+        await AsyncStorage.removeItem("lastTrackingOrderId");
+
+        if (!fallbackTriedRef.current) {
+          fallbackTriedRef.current = true;
+          const latestOrderId = await resolveLatestOrderIdFromHistory();
+          if (latestOrderId) {
+            setOrderId(latestOrderId);
+            return;
+          }
+        }
+
+        setTracking(null);
+        setLoadError("Không tìm thấy đơn hàng để theo dõi.");
+      } else {
+        setLoadError("Không lấy được thông tin đơn hàng.");
+      }
+
       setLoading(false);
     }
-  };
+  }, [orderId, resolveLatestOrderIdFromHistory]);
 
   useEffect(() => {
     const resolveOrderId = async () => {
@@ -133,12 +172,18 @@ const OrderTrackingScreen = ({ route }) => {
       if (Number.isFinite(parsedSavedOrderId) && parsedSavedOrderId > 0) {
         setOrderId(parsedSavedOrderId);
       } else {
-        setLoading(false);
+        const latestOrderId = await resolveLatestOrderIdFromHistory();
+        if (latestOrderId) {
+          setOrderId(latestOrderId);
+        } else {
+          setLoading(false);
+          setLoadError("Chưa có đơn hàng để theo dõi. Hãy đặt đơn mới để xem tracking.");
+        }
       }
     };
 
     resolveOrderId();
-  }, [routeOrderId]);
+  }, [routeOrderId, resolveLatestOrderIdFromHistory]);
 
   useEffect(() => {
     if (!orderId) {
@@ -153,7 +198,7 @@ const OrderTrackingScreen = ({ route }) => {
         clearInterval(timerRef.current);
       }
     };
-  }, [orderId]);
+  }, [orderId, fetchTracking]);
 
   useEffect(() => {
     const syncRoute = async () => {
@@ -208,9 +253,10 @@ const OrderTrackingScreen = ({ route }) => {
     return (
       <SafeAreaView style={styles.center}>
         <Text style={styles.emptyText}>
-          {orderId
-            ? "Không lấy được thông tin đơn hàng."
-            : "Chưa có đơn hàng để theo dõi. Hãy đặt đơn mới để xem tracking."}
+          {loadError ||
+            (orderId
+              ? "Không lấy được thông tin đơn hàng."
+              : "Chưa có đơn hàng để theo dõi. Hãy đặt đơn mới để xem tracking.")}
         </Text>
       </SafeAreaView>
     );

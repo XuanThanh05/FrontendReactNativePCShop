@@ -342,7 +342,7 @@ const CheckoutScreen = ({ route, navigation }) => {
               const response = await createOrder(orderData);
               const newOrder = response.data;
 
-              if (!isStorePickup && newOrder?.orderId) {
+              if (newOrder?.orderId) {
                 await AsyncStorage.setItem("lastTrackingOrderId", String(newOrder.orderId));
               }
 
