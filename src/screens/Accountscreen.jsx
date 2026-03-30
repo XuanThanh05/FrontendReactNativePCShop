@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 
 const MenuItem = ({ emoji, label, onPress }) => (
@@ -107,22 +106,6 @@ const AccountScreen = ({ navigation }) => {
               } else {
                 navigation?.navigate("Login");
               }
-            }}
-          />
-          <View style={styles.divider} />
-          <MenuItem
-            emoji="�"
-            label="Theo dõi đơn hàng"
-            onPress={async () => {
-              const savedOrderId = await AsyncStorage.getItem("lastTrackingOrderId");
-              const parsedOrderId = Number(savedOrderId);
-
-              if (Number.isFinite(parsedOrderId) && parsedOrderId > 0) {
-                navigation?.navigate("OrderTracking", { orderId: parsedOrderId });
-                return;
-              }
-
-              navigation?.navigate("OrderTracking");
             }}
           />
         </MenuSection>

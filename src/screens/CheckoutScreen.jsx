@@ -13,50 +13,12 @@ import {
     View,
 } from "react-native";
   import * as Location from "expo-location";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { calculateShipping, getNearbyStores, createOrder } from "../services/api";
+import { calculateShipping, getNearbyStores } from "../services/api";
 import { useUserLocation } from "../hooks/useUserLocation";
-
-const getShippingByRouteDistance = (distanceKm, durationMin) => {
-  let fee;
-  let estimatedDays;
-  let zone;
-
-  if (distanceKm <= 5) {
-    fee = 15000;
-    estimatedDays = 1;
-    zone = "Noi thanh";
-  } else if (distanceKm <= 15) {
-    fee = 25000;
-    estimatedDays = 1;
-    zone = "Noi thanh";
-  } else if (distanceKm <= 50) {
-    fee = 35000;
-    estimatedDays = 2;
-    zone = "Ngoai thanh";
-  } else if (distanceKm <= 200) {
-    fee = 55000;
-    estimatedDays = 3;
-    zone = "Tinh lan can";
-  } else {
-    fee = 80000;
-    estimatedDays = 5;
-    zone = "Tinh khac";
-  }
-
-  return {
-    fee,
-    estimatedDays,
-    distanceKm: Math.round(distanceKm * 10) / 10,
-    zone,
-    estimatedMinutes: Number.isFinite(durationMin) ? Math.max(1, Math.round(durationMin)) : null,
-    source: "route",
-  };
-};
 
 const CheckoutScreen = ({ route, navigation }) => {
   const { product } = route.params || {};
@@ -64,7 +26,6 @@ const CheckoutScreen = ({ route, navigation }) => {
   const { selectedItems, totalPrice, clearCart } = useCart();
   const selectedStoreFromMap = route.params?.selectedStoreFromMap;
   const selectedUserLocationFromMap = route.params?.selectedUserLocationFromMap;
-  const routeSummaryFromMap = route.params?.routeSummaryFromMap;
   const { location } = useUserLocation();
 
   const checkoutItems = product ? [{ ...product, quantity: 1 }] : selectedItems;
@@ -87,7 +48,6 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [deliveryError, setDeliveryError] = useState("");
   const [defaultStore, setDefaultStore] = useState(null);
   const [storeLoading, setStoreLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -184,18 +144,6 @@ const CheckoutScreen = ({ route, navigation }) => {
       return;
     }
 
-    if (routeSummaryFromMap?.distanceKm != null) {
-      setShippingInfo(
-        getShippingByRouteDistance(
-          Number(routeSummaryFromMap.distanceKm),
-          Number(routeSummaryFromMap.durationMin)
-        )
-      );
-      setDeliveryError("");
-      setDeliveryLoading(false);
-      return;
-    }
-
     let cancelled = false;
     setDeliveryLoading(true);
     setDeliveryError("");
@@ -221,7 +169,7 @@ const CheckoutScreen = ({ route, navigation }) => {
     return () => {
       cancelled = true;
     };
-  }, [deliveryType, selectedLocation, routeSummaryFromMap]);
+  }, [deliveryType, selectedLocation]);
 
   const handleChangeDeliveryType = (type) => {
     setDelivery(type);
@@ -248,11 +196,6 @@ const CheckoutScreen = ({ route, navigation }) => {
   const finalTotal = subtotal + shippingFee;
   const deliverySummary = (() => {
     if (!shippingInfo) return null;
-
-    if (shippingInfo?.estimatedMinutes) {
-      return `${shippingInfo.zone} · ${shippingInfo.distanceKm} km · khoảng ${shippingInfo.estimatedMinutes} phút`;
-    }
-
     return `${shippingInfo.zone} · ${shippingInfo.distanceKm} km · ${shippingInfo.estimatedDays} ngày`;
   })();
 
@@ -307,84 +250,17 @@ const CheckoutScreen = ({ route, navigation }) => {
         { text: "Huỷ", style: "cancel" },
         {
           text: "Xác nhận đặt hàng",
-          onPress: async () => {
-            setIsSubmitting(true);
-            try {
-              const isStorePickup = deliveryType === "store";
-              const latitude = isStorePickup
-                ? defaultStore?.latitude ?? null
-                : selectedLocation?.latitude ?? null;
-              const longitude = isStorePickup
-                ? defaultStore?.longitude ?? null
-                : selectedLocation?.longitude ?? null;
-
-              // Prepare order data
-              const orderData = {
-                totalAmount: finalTotal,
-                deliveryType,
-                buyerName,
-                buyerPhone,
-                email,
-                city,
-                district,
-                address,
-                latitude,
-                longitude,
-                items: checkoutItems.map(item => ({
-                  productId: item.id,
-                  quantity: item.quantity,
-                  priceAtPurchase: item.price,
-                })),
-              };
-
-              // Call API to create order
-              const response = await createOrder(orderData);
-              const newOrder = response.data;
-
-              if (!isStorePickup && newOrder?.orderId) {
-                await AsyncStorage.setItem("lastTrackingOrderId", String(newOrder.orderId));
-              }
-
-              // Clear cart if it's not a single product purchase
+          onPress: () => {
+            setTimeout(() => {
               if (!product) clearCart();
-
-              if (isStorePickup) {
-                Alert.alert(
-                  "Đặt hàng thành công",
-                  "Đơn nhận tại cửa hàng đã được tạo. Bạn có thể xem trong lịch sử mua hàng.",
-                  [
-                    {
-                      text: "Xem lịch sử",
-                      onPress: () => {
-                        navigation.reset({
-                          index: 1,
-                          routes: [
-                            { name: "Main" },
-                            { name: "UserStatisticsReport" },
-                          ],
-                        });
-                      },
-                    },
-                  ]
-                );
-              } else {
-                // Ship to home: open tracking immediately
-                navigation.reset({
-                  index: 1,
-                  routes: [
-                    { name: "Main" },
-                    { name: "OrderTracking", params: { orderId: newOrder.orderId } },
-                  ],
-                });
-              }
-            } catch (error) {
-              console.error("Create order error:", error);
-              Alert.alert(
-                "Lỗi",
-                error?.response?.data?.message || "Không thể tạo đơn hàng. Vui lòng thử lại."
-              );
-              setIsSubmitting(false);
-            }
+              navigation.reset({
+                index: 1,
+                routes: [
+                  { name: "Main" },
+                  { name: "OrderTracking", params: { orderId: 2 } },
+                ],
+              });
+            }, 300);
           },
         },
       ],
@@ -588,9 +464,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                   <Text style={styles.nearestStoreTitle}>🏪 Cửa hàng gần bạn nhất</Text>
                   <Text style={styles.nearestStoreName}>{selectedStore.name}</Text>
                   <Text style={styles.nearestStoreAddress}>{selectedStore.address}</Text>
-                  <Text style={styles.nearestStoreDistance}>
-                    Khoảng cách: {routeSummaryFromMap?.distanceKm ?? selectedStore.distanceKm} km
-                  </Text>
+                  <Text style={styles.nearestStoreDistance}>Khoảng cách: {selectedStore.distanceKm} km</Text>
                 </View>
               )}
 

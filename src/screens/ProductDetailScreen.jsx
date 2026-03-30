@@ -1,6 +1,5 @@
 // src/screens/ProductDetailScreen.js
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -86,8 +85,6 @@ const FLASH_COUNTDOWN = [
   { key: "minute", label: "PHÚT", value: "28" },
   { key: "second", label: "GIÂY", value: "25" },
 ];
-
-const REVIEW_CACHE_KEY_PREFIX = "product_review_cache:";
 
 // ── Normalize ProductDTO → shape ProductDetailScreen dùng ──────────────────
 // ProductDTO: { id, name, description, price, stockQuantity, category,
@@ -215,40 +212,10 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewSummary, setReviewSummary] = useState(null);
   const [reviewItems, setReviewItems] = useState([]);
-  const [reviewReloadTick, setReviewReloadTick] = useState(0);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
-
-  const reviewCacheKey = `${REVIEW_CACHE_KEY_PREFIX}${product.id}`;
-
-  const loadCachedReviews = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(reviewCacheKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      console.log("load cached reviews error", e?.message || e);
-      return [];
-    }
-  };
-
-  const saveCachedReviews = async (items) => {
-    try {
-      await AsyncStorage.setItem(reviewCacheKey, JSON.stringify(Array.isArray(items) ? items : []));
-    } catch (e) {
-      console.log("save cached reviews error", e?.message || e);
-    }
-  };
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      setReviewReloadTick((prev) => prev + 1);
-    });
-
-    return unsubscribe;
-  }, [navigation]);
 
   // Gallery ưu tiên từ API (tag: gallery:url1;url2;...), luôn bao gồm ảnh chính.
   const THUMBNAIL_IMAGES = Array.from(
@@ -336,22 +303,15 @@ const ProductDetailScreen = ({ route, navigation }) => {
           getProductReviews(product.id, 0, 5),
         ]);
 
-        const reviewsFromApi = Array.isArray(reviewsRes?.data?.content) ? reviewsRes.data.content : [];
-        const cachedReviews = await loadCachedReviews();
-        const reviewsToUse = reviewsFromApi.length > 0 ? reviewsFromApi : cachedReviews;
-
         if (!cancelled) {
           setReviewSummary(summaryRes?.data || null);
-          setReviewItems(reviewsToUse);
+          setReviewItems(Array.isArray(reviewsRes?.data?.content) ? reviewsRes.data.content : []);
         }
-
-        await saveCachedReviews(reviewsToUse);
       } catch (error) {
-        const cachedReviews = await loadCachedReviews();
         if (!cancelled) {
           console.log("load review data error", error?.response?.data || error?.message || error);
           setReviewSummary(null);
-          setReviewItems(cachedReviews);
+          setReviewItems([]);
         }
       } finally {
         if (!cancelled) {
@@ -367,7 +327,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
     return () => {
       cancelled = true;
     };
-  }, [product.id, isLoggedIn, reviewReloadTick]);
+  }, [product.id, isLoggedIn]);
 
   const toggleCombo = (id) => {
     setCombos(prev => prev.map(item =>
@@ -438,34 +398,15 @@ const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const currentImage = THUMBNAIL_IMAGES[currentImageIndex] || product.image;
-  const reviewStatsFromItems = reviewItems.reduce(
-    (acc, item) => {
-      const star = Number(item?.rating || 0);
-      if (star >= 1 && star <= 5) {
-        acc.total += 1;
-        acc.sum += star;
-        if (star === 5) acc.fiveStar += 1;
-        if (star === 4) acc.fourStar += 1;
-        if (star === 3) acc.threeStar += 1;
-        if (star === 2) acc.twoStar += 1;
-        if (star === 1) acc.oneStar += 1;
-      }
-      return acc;
-    },
-    { total: 0, sum: 0, fiveStar: 0, fourStar: 0, threeStar: 0, twoStar: 0, oneStar: 0 }
-  );
-
-  const averageRating =
-    reviewSummary?.averageRating ??
-    (reviewStatsFromItems.total > 0 ? reviewStatsFromItems.sum / reviewStatsFromItems.total : product.rating ?? 0);
-  const totalReviewCount = reviewSummary?.totalReviews ?? reviewStatsFromItems.total ?? product.reviews ?? 0;
+  const averageRating = reviewSummary?.averageRating ?? product.rating ?? 0;
+  const totalReviewCount = reviewSummary?.totalReviews ?? product.reviews ?? 0;
   const rating = Math.round(averageRating || 0);
   const ratingBreakdown = [
-    { star: 5, count: reviewSummary?.fiveStar ?? reviewStatsFromItems.fiveStar },
-    { star: 4, count: reviewSummary?.fourStar ?? reviewStatsFromItems.fourStar },
-    { star: 3, count: reviewSummary?.threeStar ?? reviewStatsFromItems.threeStar },
-    { star: 2, count: reviewSummary?.twoStar ?? reviewStatsFromItems.twoStar },
-    { star: 1, count: reviewSummary?.oneStar ?? reviewStatsFromItems.oneStar },
+    { star: 5, count: reviewSummary?.fiveStar ?? 0 },
+    { star: 4, count: reviewSummary?.fourStar ?? 0 },
+    { star: 3, count: reviewSummary?.threeStar ?? 0 },
+    { star: 2, count: reviewSummary?.twoStar ?? 0 },
+    { star: 1, count: reviewSummary?.oneStar ?? 0 },
   ];
   const outOfStock   = product.stock === 0;
   const stockLabel   = outOfStock ? "Hết hàng" : "Sẵn hàng";
@@ -483,109 +424,47 @@ const ProductDetailScreen = ({ route, navigation }) => {
       return;
     }
 
-    const openReviewForm = async () => {
-      const myReview = reviewItems.find((item) => item.mine);
-      if (myReview) {
-        setReviewRating(myReview.rating || 5);
-        setReviewComment(myReview.comment || "");
-      }
-      setShowReviewForm((prev) => !prev);
-    };
+    if (!reviewSummary?.canReview) {
+      Alert.alert("Chưa thể đánh giá", "Bạn chỉ có thể đánh giá sản phẩm đã mua.");
+      return;
+    }
 
-    openReviewForm();
+    const myReview = reviewItems.find((item) => item.mine);
+    if (myReview) {
+      setReviewRating(myReview.rating || 5);
+      setReviewComment(myReview.comment || "");
+    }
+    setShowReviewForm((prev) => !prev);
   };
 
   const handleSubmitReview = async () => {
     if (!isLoggedIn) {
-      Alert.alert(
-        "Bạn chưa đăng nhập",
-        "Vui lòng đăng nhập để viết đánh giá.",
-        [
-          { text: "Để sau", style: "cancel" },
-          { text: "Đăng nhập", onPress: () => navigation.navigate("Login") },
-        ]
-      );
+      Alert.alert("Bạn chưa đăng nhập", "Vui lòng đăng nhập để viết đánh giá.");
+      return;
+    }
+
+    if (!reviewSummary?.canReview) {
+      Alert.alert("Chưa thể đánh giá", "Bạn chỉ có thể đánh giá sản phẩm đã mua.");
       return;
     }
 
     setReviewSubmitting(true);
     try {
-      const submitRes = await submitProductReview(product.id, {
+      await submitProductReview(product.id, {
         rating: reviewRating,
         comment: reviewComment.trim() || null,
       });
 
-      const submittedReview = submitRes?.data || null;
+      const [summaryRes, reviewsRes] = await Promise.all([
+        getProductReviewSummary(product.id),
+        getProductReviews(product.id, 0, 5),
+      ]);
 
-      if (submittedReview) {
-        const mergedReviews = (() => {
-          const currentItems = Array.isArray(reviewItems) ? reviewItems : [];
-          const withoutMine = currentItems.filter((item) => !item.mine);
-          return [submittedReview, ...withoutMine];
-        })();
-
-        setReviewItems(mergedReviews);
-        await saveCachedReviews(mergedReviews);
-
-        setReviewSummary((prev) => {
-          if (!prev) {
-            return prev;
-          }
-
-          const currentTotal = Number(prev.totalReviews || 0);
-          const hadReviewed = Boolean(prev.hasReviewed);
-          const currentAverage = Number(prev.averageRating || 0);
-          const nextTotal = hadReviewed ? currentTotal : currentTotal + 1;
-          const nextAverage = hadReviewed
-            ? submittedReview.rating
-            : (currentAverage * currentTotal + submittedReview.rating) / Math.max(1, nextTotal);
-
-          const ratingKeyMap = {
-            1: "oneStar",
-            2: "twoStar",
-            3: "threeStar",
-            4: "fourStar",
-            5: "fiveStar",
-          };
-
-          const next = {
-            ...prev,
-            averageRating: Number(nextAverage.toFixed(1)),
-            totalReviews: nextTotal,
-            hasReviewed: true,
-            canReview: true,
-          };
-
-          if (!hadReviewed) {
-            const key = ratingKeyMap[submittedReview.rating];
-            if (key) {
-              next[key] = Number(next[key] || 0) + 1;
-            }
-          }
-
-          return next;
-        });
-      }
-
-      try {
-        const [summaryRes, reviewsRes] = await Promise.all([
-          getProductReviewSummary(product.id),
-          getProductReviews(product.id, 0, 5),
-        ]);
-
-        const refreshedReviews = Array.isArray(reviewsRes?.data?.content) ? reviewsRes.data.content : [];
-
-        setReviewSummary(summaryRes?.data || null);
-        setReviewItems(refreshedReviews);
-        await saveCachedReviews(refreshedReviews);
-      } catch (refreshError) {
-        console.log("refresh review data after submit error", refreshError?.response?.data || refreshError?.message || refreshError);
-      }
-
+      setReviewSummary(summaryRes?.data || null);
+      setReviewItems(Array.isArray(reviewsRes?.data?.content) ? reviewsRes.data.content : []);
       setShowReviewForm(false);
       Alert.alert("Thành công", "Đánh giá của bạn đã được lưu.");
     } catch (error) {
-      console.log("submit review error", error?.response?.status, error?.response?.data || error?.message || error);
       const backendMessage = error?.response?.data?.error || error?.response?.data?.message;
       Alert.alert("Không thể gửi đánh giá", backendMessage || "Đã có lỗi xảy ra, vui lòng thử lại.");
     } finally {

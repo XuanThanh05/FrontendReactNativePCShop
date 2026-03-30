@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   ScrollView,
@@ -10,102 +9,47 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { formatPrice } from "../constants/mockData";
-import { useAuth } from "../context/AuthContext";
-import { getMyOrderHistory, getProductById } from "../services/api";
+import { formatPrice, hotProducts } from "../constants/mockData";
 
 const UserStatisticsReport = ({ navigation }) => {
-  const { isLoggedIn } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Tháng 3/2026 (0-indexed)
-  const [purchaseHistory, setPurchaseHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [errorText, setErrorText] = useState("");
 
-  const formatDate = (value) => {
-    if (!value) return "";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return "";
+  const purchaseHistory = useMemo(() => {
+    if (!hotProducts || hotProducts.length < 5) return [];
 
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
-
-  const mapStatus = (item) => {
-    const tracking = String(item?.trackingStatus || "").toUpperCase();
-    if (tracking === "DELIVERING" || tracking === "PICKING") return "Đang giao";
-    if (tracking === "DELIVERED" || tracking === "CONFIRMED") return "Đã thanh toán";
-
-    const orderStatus = String(item?.status || "").toUpperCase();
-    if (orderStatus === "PAID") return "Đã thanh toán";
-    if (orderStatus === "PENDING") return "Chờ xử lý";
-    return item?.status || "Chưa xác định";
-  };
-
-  const getDeliveryMethod = (item) => {
-    const tracking = String(item?.trackingStatus || "").toUpperCase();
-    if (tracking === "CONFIRMED") return "Nhận tại cửa hàng";
-    if (tracking === "DELIVERING" || tracking === "PICKING" || tracking === "DELIVERED") {
-      return "Giao tận nơi";
-    }
-    return "Không xác định";
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadHistory = async () => {
-      if (!isLoggedIn) {
-        setPurchaseHistory([]);
-        return;
-      }
-
-      setLoading(true);
-      setErrorText("");
-      try {
-        const res = await getMyOrderHistory();
-        const rows = Array.isArray(res?.data) ? res.data : [];
-        const normalized = rows.map((item, index) => ({
-          id: `${item.orderId}-${item.productId}-${index}`,
-          orderId: item.orderId,
-          productId: item.productId,
-          name: item.productName || "Sản phẩm",
-          image: item.productImage || "",
-          discount: Number(item.productDiscount || 0),
-          date: formatDate(item.createdAt),
-          status: mapStatus(item),
-          deliveryMethod: getDeliveryMethod(item),
-          price: Number(item.unitPrice || 0),
-          quantity: Number(item.quantity || 0),
-          lineTotal: Number(item.lineTotal || 0),
-          createdAt: item.createdAt,
-        }));
-
-        if (!cancelled) {
-          setPurchaseHistory(normalized);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.log("load order history error", error?.response?.data || error?.message || error);
-          setErrorText("Không tải được lịch sử mua hàng. Vui lòng thử lại.");
-          setPurchaseHistory([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadHistory();
-
-    const unsubscribe = navigation.addListener("focus", loadHistory);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [isLoggedIn, navigation]);
+    return [
+      {
+        ...hotProducts[0],
+        date: "15/03/2026",
+        status: "Đã giao",
+      },
+      {
+        ...hotProducts[4],
+        date: "18/03/2026",
+        status: "Đang giao",
+      },
+      {
+        ...hotProducts[1],
+        date: "10/02/2026",
+        status: "Đã giao",
+      },
+      {
+        ...hotProducts[3],
+        date: "02/02/2026",
+        status: "Đã giao",
+      },
+      {
+        ...hotProducts[5],
+        date: "05/01/2026",
+        status: "Đã giao",
+      },
+      {
+        ...hotProducts[6],
+        date: "20/12/2025",
+        status: "Đã giao",
+      },
+    ];
+  }, [hotProducts]);
 
   const monthString = `${String(currentDate.getMonth() + 1).padStart(2, "0")}/${currentDate.getFullYear()}`;
 
@@ -114,11 +58,8 @@ const UserStatisticsReport = ({ navigation }) => {
   );
 
   // Tính tổng chi tiêu và tổng đơn của toàn bộ lịch sử (cố định)
-  const totalSpent = purchaseHistory.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
-  const totalOrders = useMemo(() => {
-    const orderSet = new Set(purchaseHistory.map((item) => item.orderId));
-    return orderSet.size;
-  }, [purchaseHistory]);
+  const totalSpent = purchaseHistory.reduce((sum, item) => sum + item.price, 0);
+  const totalOrders = purchaseHistory.length;
 
   const prevMonth = () =>
     setCurrentDate(
@@ -129,24 +70,8 @@ const UserStatisticsReport = ({ navigation }) => {
       new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
     );
 
-  const handleOpenProduct = async (item) => {
-    if (!item?.productId) {
-      return;
-    }
-
-    try {
-      const res = await getProductById(item.productId);
-      const product = res?.data;
-      if (product?.id) {
-        navigation.navigate("Product", { product });
-      }
-    } catch (error) {
-      console.log("open product from history error", error?.response?.data || error?.message || error);
-    }
-  };
-
   const renderProductItem = ({ item }) => (
-    <TouchableOpacity style={styles.productCard} onPress={() => handleOpenProduct(item)} activeOpacity={0.85}>
+    <View style={styles.productCard}>
       <View style={styles.imageContainer}>
         <Image source={{ uri: item.image }} style={styles.productImage} />
         {item.discount > 0 && (
@@ -173,10 +98,9 @@ const UserStatisticsReport = ({ navigation }) => {
         <Text style={styles.productName} numberOfLines={2}>
           {item.name}
         </Text>
-        <Text style={styles.productMeta}>{item.deliveryMethod}</Text>
         <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -235,16 +159,7 @@ const UserStatisticsReport = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-          {loading ? (
-            <View style={[styles.cardList, styles.emptyContainer]}>
-              <ActivityIndicator size="small" color="#D70018" />
-              <Text style={styles.emptyText}>Đang tải lịch sử mua hàng...</Text>
-            </View>
-          ) : errorText ? (
-            <View style={[styles.cardList, styles.emptyContainer]}>
-              <Text style={styles.emptyText}>{errorText}</Text>
-            </View>
-          ) : filteredHistory.length > 0 ? (
+          {filteredHistory.length > 0 ? (
             <View style={styles.cardList}>
               <FlatList
                 data={filteredHistory}
@@ -445,12 +360,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   productStatus: {
-  productMeta: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-    fontWeight: "600",
-  },
     fontSize: 10,
     fontWeight: "800",
     paddingHorizontal: 8,

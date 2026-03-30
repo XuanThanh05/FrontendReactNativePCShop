@@ -181,35 +181,7 @@ const StoreMapScreen = ({ navigation, route }) => {
     });
   };
 
-  const getCurrentRouteSummary = async () => {
-    if (routeSummary) {
-      return routeSummary;
-    }
-
-    if (!location || !selectedStore) {
-      return null;
-    }
-
-    try {
-      const directions = await getGoongRoute(
-        { latitude: location.latitude, longitude: location.longitude },
-        { latitude: selectedStore.latitude, longitude: selectedStore.longitude }
-      );
-
-      if (directions?.distanceMeters != null && directions?.durationSeconds != null) {
-        return {
-          distanceKm: Math.round((directions.distanceMeters / 1000) * 10) / 10,
-          durationMin: Math.max(1, Math.round(directions.durationSeconds / 60)),
-        };
-      }
-    } catch (e) {
-      console.log("goong summary error", e?.message || e);
-    }
-
-    return null;
-  };
-
-  const handleChooseStore = async () => {
+  const handleChooseStore = () => {
     if (!selectedStore) {
       Alert.alert("Chưa chọn cửa hàng", "Vui lòng chọn một cửa hàng trước khi tiếp tục.");
       return;
@@ -221,7 +193,6 @@ const StoreMapScreen = ({ navigation, route }) => {
     }
 
     const checkoutContext = route?.params?.checkoutContext || {};
-    const routeSummaryFromMap = await getCurrentRouteSummary();
 
     navigation.navigate("Checkout", {
       ...checkoutContext,
@@ -230,7 +201,6 @@ const StoreMapScreen = ({ navigation, route }) => {
         latitude: location.latitude,
         longitude: location.longitude,
       },
-      routeSummaryFromMap,
       fromMapPickAt: Date.now(),
     });
   };
@@ -311,9 +281,7 @@ const StoreMapScreen = ({ navigation, route }) => {
         <View style={styles.selectedCard}>
           <View style={styles.selectedRow}>
             <Text style={styles.selectedName}>{selectedStore.name}</Text>
-            <Text style={styles.selectedDist}>
-              {routeSummary?.distanceKm ?? selectedStore.distanceKm} km
-            </Text>
+            <Text style={styles.selectedDist}>{selectedStore.distanceKm} km</Text>
           </View>
           <Text style={styles.selectedAddress}>{selectedStore.address}</Text>
           <View style={styles.actionRow}>

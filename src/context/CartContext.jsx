@@ -105,15 +105,8 @@ export const CartProvider = ({ children }) => {
         return raw.map(item => normalizeItem(item, selectedMap[item.cartItemId] ?? true));
       });
     } catch (err) {
-      // If 401, fallback to guest cart
-      if (err?.response?.status === 401) {
-        console.log('Cart auth failed - loading guest cart');
-        const localItems = await loadGuestCart();
-        setCartItems(localItems);
-      } else {
-        console.error('fetchCart error:', err);
-        if (!isLoggedIn) setCartItems([]);
-      }
+      console.error('fetchCart error:', err);
+      if (!isLoggedIn) setCartItems([]);
     } finally {
       setLoading(false);
     }

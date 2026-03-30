@@ -33,14 +33,7 @@ export const AuthProvider = ({ children }) => {
               setCurrentUser(hydratedUser);
               await AsyncStorage.setItem("currentUser", JSON.stringify(hydratedUser));
             } catch (e) {
-              // If token is invalid (401), clear it and logout
-              if (e?.response?.status === 401) {
-                console.log("Token expired - clearing stored user");
-                setCurrentUser(null);
-                await AsyncStorage.removeItem("currentUser");
-              } else {
-                console.log("Hydrate profile error:", e?.response?.data || e?.message || e);
-              }
+              console.log("Hydrate profile error:", e?.response?.data || e?.message || e);
             }
           }
         }
