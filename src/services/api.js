@@ -6,9 +6,10 @@ import axios from "axios";
 // iOS Simulator → localhost
 // Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10) 
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
+// http://161.118.200.236/api
 
 const API = axios.create({
-  baseURL: "http://192.168.10.103:8080/api",
+  baseURL: "http://192.168.2.15:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -35,6 +36,10 @@ API.interceptors.request.use(async (config) => {
 // API login
 export const loginApi = (data) => {
   return API.post("/auth/login", data);
+};
+
+export const registerApi = (data) => {
+  return API.post("/auth/register", data);
 };
 
 export const getAuthMe = () => {
