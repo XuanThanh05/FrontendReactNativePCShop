@@ -396,14 +396,6 @@ const HomeScreen = ({ navigation }) => {
               </View>
             </TouchableOpacity>
           )}
-          {currentUser?.role === "admin" && (
-            <TouchableOpacity
-              style={styles.adminBtn}
-              onPress={() => navigation.navigate("Statistics")}
-            >
-              <Text style={styles.adminBtnText}>📊</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
 

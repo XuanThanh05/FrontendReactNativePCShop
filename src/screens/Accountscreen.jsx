@@ -147,6 +147,17 @@ const AccountScreen = ({ navigation }) => {
               <MenuItem emoji="🔒" label="Đổi mật khẩu" onPress={() => {}} />
             </MenuSection>
 
+            {/* ── Quản lý (chỉ admin) ────────────────────────────────────── */}
+            {currentUser?.role === "admin" && (
+              <MenuSection title="Quản lý">
+                <MenuItem
+                  emoji="📊"
+                  label="Thống kê & báo cáo"
+                  onPress={() => navigation?.navigate("Statistics")}
+                />
+              </MenuSection>
+            )}
+
             {/* ── Đăng xuất ──────────────────────────────────── */}
             <View style={{ marginHorizontal: 12, marginTop: 12 }}>
               <TouchableOpacity

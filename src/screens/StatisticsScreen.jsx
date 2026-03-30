@@ -144,11 +144,11 @@ const RevenueChart = ({ t }) => {
 /** Trạng thái đơn hàng — horizontal bar */
 const OrderStatus = ({ orderStatusData, t }) => {
   const statusColors = {
-    PAID: { color: '#10b981' },
     PENDING: { color: '#f59e0b' },
-    PROCESSING: { color: '#3b82f6' },
-    SHIPPING: { color: '#8b5cf6' },
-    COMPLETED: { color: '#06b6d4' },
+    CONFIRMED: { color: '#3b82f6' },
+    PICKING: { color: '#8b5cf6' },
+    DELIVERING: { color: '#06b6d4' },
+    COMPLETED: { color: '#10b981' },
     CANCELLED: { color: '#ef4444' },
   };
 
@@ -164,14 +164,14 @@ const OrderStatus = ({ orderStatusData, t }) => {
       </View>
 
       {orderStatusData.map((item, i) => {
-        const config = statusColors[item.status] || { color: '#6b7280' };
+        const config = statusColors[item.tracking_status] || { color: '#6b7280' };
         const percent = totalOrders > 0 ? (item.count / totalOrders) * 100 : 0;
 
         return (
           <View key={i} style={styles.orderRow}>
             <View style={styles.orderLeft}>
               <View style={[styles.dot, { backgroundColor: config.color }]} />
-              <Text style={[styles.orderName, { color: '#0f172a' }]}>{item.status}</Text>
+              <Text style={[styles.orderName, { color: '#0f172a' }]}>{item.tracking_status}</Text>
             </View>
             <View style={styles.orderBarWrap}>
               <View style={[styles.orderBarBg, { backgroundColor: '#f3f4f6' }]}>
