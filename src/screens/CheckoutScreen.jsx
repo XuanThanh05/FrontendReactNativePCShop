@@ -331,7 +331,8 @@ const CheckoutScreen = ({ route, navigation }) => {
                 latitude,
                 longitude,
                 items: checkoutItems.map(item => ({
-                  productId: item.id,
+                  // cart flow uses cartItemId as id, so prefer productId when available
+                  productId: item.productId ?? item.id,
                   quantity: item.quantity,
                   priceAtPurchase: item.price,
                 })),
@@ -379,9 +380,15 @@ const CheckoutScreen = ({ route, navigation }) => {
               }
             } catch (error) {
               console.error("Create order error:", error);
+              const backendMessage =
+                error?.response?.data?.message ||
+                error?.response?.data?.error ||
+                (error?.response?.data && typeof error.response.data === "object"
+                  ? Object.values(error.response.data)[0]
+                  : null);
               Alert.alert(
                 "Lỗi",
-                error?.response?.data?.message || "Không thể tạo đơn hàng. Vui lòng thử lại."
+                backendMessage || "Không thể tạo đơn hàng. Vui lòng thử lại."
               );
               setIsSubmitting(false);
             }

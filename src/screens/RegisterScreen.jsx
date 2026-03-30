@@ -1,8 +1,10 @@
 // src/screens/RegisterScreen.js
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -15,13 +17,46 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 
+const InputField = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  secureTextEntry,
+  hint,
+  rightElement,
+  error,
+}) => (
+  <View style={styles.fieldWrap}>
+    <View style={[styles.inputWrap, error && styles.inputWrapError]}>
+      <TextInput
+        style={styles.input}
+        placeholder={placeholder || label}
+        placeholderTextColor="#bbb"
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType || "default"}
+        secureTextEntry={secureTextEntry || false}
+        autoCapitalize="none"
+      />
+      {rightElement}
+    </View>
+    {error ? <Text style={styles.inputError}>{error}</Text> : null}
+    {hint && <Text style={styles.inputHint}>{hint}</Text>}
+  </View>
+);
+
 const RegisterScreen = ({ navigation }) => {
   const { register } = useAuth();
+  const keyboardOffset = Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0;
+  const modalAnim = useRef(new Animated.Value(0)).current;
+  const autoCloseTimerRef = useRef(null);
 
   const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [birthday, setBirthday] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirm] = useState("");
   const [isStudent, setIsStudent] = useState(false);
@@ -29,77 +64,147 @@ const RegisterScreen = ({ navigation }) => {
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("Đăng ký thành công");
+  const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({
+    fullName: "",
+    username: "",
+    phone: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    agreeTerms: "",
+  });
 
-  const handleRegister = () => {
-    if (!fullName.trim()) return Alert.alert("Lỗi", "Vui lòng nhập họ và tên");
-    if (!phone.trim()) return Alert.alert("Lỗi", "Vui lòng nhập số điện thoại");
-    if (phone.length < 10)
-      return Alert.alert("Lỗi", "Số điện thoại không hợp lệ");
-    if (!password) return Alert.alert("Lỗi", "Vui lòng nhập mật khẩu");
-    if (password.length < 6)
-      return Alert.alert("Lỗi", "Mật khẩu phải có ít nhất 6 ký tự");
-    if (password !== confirmPassword)
-      return Alert.alert("Lỗi", "Mật khẩu nhập lại không khớp");
-    if (!agreeTerms)
-      return Alert.alert("Lỗi", "Vui lòng đồng ý với điều khoản bảo mật");
-
-    setLoading(true);
-    setTimeout(async () => {
-      const result = await register({
-        fullName,
-        phone,
-        email,
-        birthday,
-        password,
-        confirmPassword,
-        isStudent,
-      });
-      setLoading(false);
-      if (result.success) {
-        Alert.alert(
-          "Thành công! 🎉",
-          `Chào mừng ${result.user.fullName} đến với PCShop!`,
-          [
-            {
-              text: "OK",
-              onPress: () =>
-                navigation.reset({ index: 0, routes: [{ name: "Main" }] }),
-            },
-          ],
-        );
-      } else {
-        Alert.alert("Đăng ký thất bại", result.message);
-      }
-    }, 600);
+  const setFieldError = (field, value) => {
+    setFieldErrors((prev) => ({ ...prev, [field]: value }));
   };
 
-  const InputField = ({
-    label,
-    value,
-    onChangeText,
-    placeholder,
-    keyboardType,
-    secureTextEntry,
-    hint,
-    rightElement,
-  }) => (
-    <View style={styles.fieldWrap}>
-      <View style={styles.inputWrap}>
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder || label}
-          placeholderTextColor="#bbb"
-          value={value}
-          onChangeText={onChangeText}
-          keyboardType={keyboardType || "default"}
-          secureTextEntry={secureTextEntry || false}
-          autoCapitalize="none"
-        />
-        {rightElement}
-      </View>
-      {hint && <Text style={styles.inputHint}>{hint}</Text>}
-    </View>
-  );
+  const clearFieldError = (field) => {
+    setFieldErrors((prev) => ({ ...prev, [field]: "" }));
+    if (formError) setFormError("");
+  };
+
+  const mapRegisterErrorToField = (message) => {
+    const normalized = String(message || "").toLowerCase();
+    if (normalized.includes("username")) return "username";
+    if (normalized.includes("phone") || normalized.includes("số điện thoại")) return "phone";
+    if (normalized.includes("email")) return "email";
+    if (normalized.includes("password") && normalized.includes("xác nhận")) return "confirmPassword";
+    if (normalized.includes("password") || normalized.includes("mật khẩu")) return "password";
+    if (normalized.includes("họ") || normalized.includes("full name")) return "fullName";
+    return null;
+  };
+
+  const handleFinishRegister = useCallback(() => {
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+    setShowSuccessModal(false);
+    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+  }, [navigation]);
+
+  useEffect(() => {
+    if (!showSuccessModal) return;
+
+    modalAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(modalAnim, {
+        toValue: 1,
+        duration: 320,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    autoCloseTimerRef.current = setTimeout(() => {
+      handleFinishRegister();
+    }, 2000);
+
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+    };
+  }, [showSuccessModal, modalAnim, handleFinishRegister]);
+
+  const handleRegister = async () => {
+    const nextErrors = {
+      fullName: "",
+      username: "",
+      phone: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      agreeTerms: "",
+    };
+
+    if (!fullName.trim()) nextErrors.fullName = "Vui lòng nhập họ và tên";
+    if (!username.trim()) nextErrors.username = "Vui lòng nhập username";
+    if (username.trim() && username.trim().length < 4) {
+      nextErrors.username = "Username phải có ít nhất 4 ký tự";
+    }
+    if (!phone.trim()) nextErrors.phone = "Vui lòng nhập số điện thoại";
+    if (phone.trim() && phone.trim().length < 8) {
+      nextErrors.phone = "Số điện thoại không hợp lệ";
+    }
+    if (!email.trim()) nextErrors.email = "Vui lòng nhập email";
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      nextErrors.email = "Email không hợp lệ";
+    }
+    if (!password) nextErrors.password = "Vui lòng nhập mật khẩu";
+    if (password && password.length < 8) {
+      nextErrors.password = "Mật khẩu phải có ít nhất 8 ký tự";
+    }
+    if (!confirmPassword) {
+      nextErrors.confirmPassword = "Vui lòng nhập lại mật khẩu";
+    } else if (password !== confirmPassword) {
+      nextErrors.confirmPassword = "Mật khẩu nhập lại không khớp";
+    }
+    if (!agreeTerms) nextErrors.agreeTerms = "Bạn cần đồng ý điều khoản để tiếp tục";
+
+    const hasErrors = Object.values(nextErrors).some(Boolean);
+    setFieldErrors(nextErrors);
+    setFormError("");
+    if (hasErrors) return;
+
+    setLoading(true);
+    const result = await register({
+      username,
+      fullName,
+      phone,
+      email,
+      password,
+      isStudent,
+    });
+    setLoading(false);
+
+    if (result.success) {
+      setSuccessMessage(
+        result.message || `Chào mừng ${result.user.fullName} đến với PCShop!`,
+      );
+      setFormError("");
+      setFieldErrors({
+        fullName: "",
+        username: "",
+        phone: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        agreeTerms: "",
+      });
+      setShowSuccessModal(true);
+    } else {
+      const targetField = mapRegisterErrorToField(result.message);
+      if (targetField) {
+        setFieldError(targetField, result.message);
+      } else {
+        setFormError(result.message || "Đăng ký thất bại. Vui lòng thử lại.");
+      }
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -114,13 +219,15 @@ const RegisterScreen = ({ navigation }) => {
       </TouchableOpacity>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={keyboardOffset}
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.container}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Logo */}
           <Text style={styles.logoEmoji}>🖥️</Text>
@@ -146,41 +253,58 @@ const RegisterScreen = ({ navigation }) => {
           <InputField
             placeholder="Nhập họ và tên"
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(value) => {
+              setFullName(value);
+              clearFieldError("fullName");
+            }}
+            error={fieldErrors.fullName}
+          />
+
+          <InputField
+            placeholder="Nhập username"
+            value={username}
+            onChangeText={(value) => {
+              setUsername(value);
+              clearFieldError("username");
+            }}
+            error={fieldErrors.username}
           />
 
           {/* Số điện thoại */}
           <InputField
             placeholder="Nhập số điện thoại"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => {
+              setPhone(value);
+              clearFieldError("phone");
+            }}
             keyboardType="phone-pad"
+            error={fieldErrors.phone}
           />
 
           {/* Email */}
           <InputField
-            placeholder="Nhập email (không bắt buộc)"
+            placeholder="Nhập email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(value) => {
+              setEmail(value);
+              clearFieldError("email");
+            }}
             keyboardType="email-address"
             hint="Hoá đơn VAT khi mua hàng sẽ được gửi qua email này"
-          />
-
-          {/* Ngày sinh */}
-          <InputField
-            placeholder="Ngày sinh (dd/mm/yyyy)"
-            value={birthday}
-            onChangeText={setBirthday}
-            keyboardType="numeric"
-            rightElement={<Text style={styles.calendarIcon}>📅</Text>}
+            error={fieldErrors.email}
           />
 
           {/* Mật khẩu */}
           <InputField
             placeholder="Nhập mật khẩu"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              setPassword(value);
+              clearFieldError("password");
+            }}
             secureTextEntry={!showPass}
+            error={fieldErrors.password}
             rightElement={
               <TouchableOpacity onPress={() => setShowPass(!showPass)}>
                 <Text style={styles.eyeIcon}>{showPass ? "🙈" : "👁"}</Text>
@@ -192,8 +316,12 @@ const RegisterScreen = ({ navigation }) => {
           <InputField
             placeholder="Nhập lại mật khẩu"
             value={confirmPassword}
-            onChangeText={setConfirm}
+            onChangeText={(value) => {
+              setConfirm(value);
+              clearFieldError("confirmPassword");
+            }}
             secureTextEntry={!showConfirm}
+            error={fieldErrors.confirmPassword}
             rightElement={
               <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
                 <Text style={styles.eyeIcon}>{showConfirm ? "🙈" : "👁"}</Text>
@@ -204,7 +332,10 @@ const RegisterScreen = ({ navigation }) => {
           {/* Checkbox điều khoản */}
           <TouchableOpacity
             style={styles.checkRow}
-            onPress={() => setAgreeTerms(!agreeTerms)}
+            onPress={() => {
+              setAgreeTerms(!agreeTerms);
+              clearFieldError("agreeTerms");
+            }}
             activeOpacity={0.7}
           >
             <View
@@ -217,6 +348,9 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.linkText}>điều khoản bảo mật cá nhân</Text>
             </Text>
           </TouchableOpacity>
+          {fieldErrors.agreeTerms ? (
+            <Text style={styles.inputError}>{fieldErrors.agreeTerms}</Text>
+          ) : null}
 
           {/* Checkbox học sinh - sinh viên */}
           <TouchableOpacity
@@ -251,6 +385,7 @@ const RegisterScreen = ({ navigation }) => {
               {loading ? "Đang đăng ký..." : "Đăng ký"}
             </Text>
           </TouchableOpacity>
+          {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
           {/* Link đăng nhập */}
           <View style={styles.switchRow}>
@@ -263,6 +398,54 @@ const RegisterScreen = ({ navigation }) => {
           <View style={{ height: 20 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <Animated.View
+          style={[
+            styles.modalOverlay,
+            {
+              opacity: modalAnim,
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.modalCard,
+              {
+                opacity: modalAnim,
+                transform: [
+                  {
+                    scale: modalAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.86, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.modalBadge}>
+              <Text style={styles.modalBadgeIcon}>✓</Text>
+            </View>
+            <Text style={styles.modalTitle}>Đăng ký hoàn tất</Text>
+            <Text style={styles.modalDescription}>{successMessage}</Text>
+            <Text style={styles.modalCountdown}>Đang chuyển về trang chủ...</Text>
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleFinishRegister}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalButtonText}>Bắt đầu mua sắm</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -277,8 +460,9 @@ const styles = StyleSheet.create({
 
   container: {
     alignItems: "center",
+    flexGrow: 1,
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 72,
   },
 
   // Logo
@@ -336,7 +520,15 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e0e0e0",
     paddingBottom: 8,
   },
+  inputWrapError: {
+    borderBottomColor: "#DC2626",
+  },
   input: { flex: 1, fontSize: 15, color: "#1a1a1a", paddingVertical: 4 },
+  inputError: {
+    fontSize: 12,
+    color: "#DC2626",
+    marginTop: 6,
+  },
   inputHint: { fontSize: 11, color: "#aaa", marginTop: 5, fontStyle: "italic" },
   eyeIcon: { fontSize: 18, paddingLeft: 8 },
   calendarIcon: { fontSize: 18, paddingLeft: 8 },
@@ -379,9 +571,85 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { backgroundColor: "#ccc" },
   submitText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  formError: {
+    width: "100%",
+    fontSize: 13,
+    color: "#B91C1C",
+    marginTop: -6,
+    marginBottom: 14,
+  },
 
   // Switch
   switchRow: { flexDirection: "row", alignItems: "center" },
   switchText: { fontSize: 14, color: "#555" },
   switchLink: { fontSize: 14, color: "#E53935", fontWeight: "700" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(229, 57, 53, 0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#FAD2D1",
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 20,
+    alignItems: "center",
+    shadowColor: "#E53935",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FCEAEA",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  modalBadgeIcon: {
+    fontSize: 30,
+    color: "#E53935",
+    fontWeight: "900",
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#E53935",
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#4B5563",
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  modalCountdown: {
+    fontSize: 12,
+    color: "#B91C1C",
+    fontStyle: "italic",
+    marginBottom: 18,
+  },
+  modalButton: {
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: "#E53935",
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });

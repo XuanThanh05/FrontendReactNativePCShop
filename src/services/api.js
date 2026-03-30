@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://192.168.10.103:8080/api",
+  baseURL: "http://192.168.2.15:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -18,6 +18,19 @@ const API = axios.create({
 // Gắn token vào header nếu có
 API.interceptors.request.use(async (config) => {
   try {
+    const requestUrl = String(config.url || "");
+    const isPublicAuthRequest =
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/register") ||
+      requestUrl.includes("/auth/logout");
+
+    if (isPublicAuthRequest) {
+      if (config.headers?.Authorization) {
+        delete config.headers.Authorization;
+      }
+      return config;
+    }
+
     const storedUser = await AsyncStorage.getItem("currentUser");
 
     if (storedUser) {
@@ -47,7 +60,15 @@ API.interceptors.response.use(
 
 // API login
 export const loginApi = (data) => {
-  return API.post("/auth/login", data);
+  const loginIdentifier = (data?.identifier || data?.username || "").trim();
+  return API.post("/auth/login", {
+    username: loginIdentifier,
+    password: data?.password || "",
+  });
+};
+
+export const registerApi = (data) => {
+  return API.post("/auth/register", data);
 };
 
 export const getAuthMe = () => {
