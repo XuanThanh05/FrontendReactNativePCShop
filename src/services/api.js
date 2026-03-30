@@ -48,7 +48,11 @@ API.interceptors.request.use(async (config) => {
 
 // API login
 export const loginApi = (data) => {
-  return API.post("/auth/login", data);
+  const loginIdentifier = (data?.identifier || data?.username || "").trim();
+  return API.post("/auth/login", {
+    username: loginIdentifier,
+    password: data?.password || "",
+  });
 };
 
 export const registerApi = (data) => {

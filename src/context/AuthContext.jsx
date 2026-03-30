@@ -115,9 +115,15 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.log("Login error:", err.response?.data || err.message);
 
+      const responseData = err?.response?.data;
+      const message =
+        responseData?.message ||
+        (responseData && typeof responseData === "object" ? Object.values(responseData)[0] : null) ||
+        "Đăng nhập thất bại";
+
       return {
         success: false,
-        message: err.response?.data?.message || "Đăng nhập thất bại",
+        message,
       };
     }
   };
