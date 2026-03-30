@@ -17,7 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { calculateShipping } from "../services/api";
+import { calculateShipping, getNearbyStores } from "../services/api";
+import { useUserLocation } from "../hooks/useUserLocation";
 
 const CheckoutScreen = ({ route, navigation }) => {
   const { product } = route.params || {};
@@ -25,6 +26,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   const { selectedItems, totalPrice, clearCart } = useCart();
   const selectedStoreFromMap = route.params?.selectedStoreFromMap;
   const selectedUserLocationFromMap = route.params?.selectedUserLocationFromMap;
+  const { location } = useUserLocation();
 
   const checkoutItems = product ? [{ ...product, quantity: 1 }] : selectedItems;
 
@@ -34,7 +36,6 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [buyerName, setBuyerName] = useState(currentUser?.fullName || "");
   const [buyerPhone, setBuyerPhone] = useState(currentUser?.phone || "");
   const [email, setEmail] = useState(currentUser?.email || "");
-  const [receiveEmail, setReceive] = useState(false);
   const [deliveryType, setDelivery] = useState("store");
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
@@ -45,6 +46,8 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const [deliveryError, setDeliveryError] = useState("");
+  const [defaultStore, setDefaultStore] = useState(null);
+  const [storeLoading, setStoreLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedStoreFromMap) return;
@@ -53,6 +56,35 @@ const CheckoutScreen = ({ route, navigation }) => {
     setSelectedLocation(selectedUserLocationFromMap || null);
     setDelivery("ship");
   }, [selectedStoreFromMap, selectedUserLocationFromMap]);
+
+  // Lấy thông tin cửa hàng gần nhất từ database khi "Nhận tại cửa hàng"
+  useEffect(() => {
+    if (deliveryType !== "store" || !location) return;
+
+    let cancelled = false;
+    setStoreLoading(true);
+
+    getNearbyStores(location.latitude, location.longitude, 50)
+      .then((res) => {
+        if (cancelled) return;
+        const stores = res.data || [];
+        if (stores.length > 0) {
+          setDefaultStore(stores[0]);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.log("get default store error", e?.response?.data || e.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStoreLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deliveryType, location]);
 
   useEffect(() => {
     if (!selectedLocation) return;
@@ -334,20 +366,6 @@ const CheckoutScreen = ({ route, navigation }) => {
           <Text style={styles.fieldHint}>
             (*) Hoá đơn VAT sẽ được gửi qua email này
           </Text>
-
-          <TouchableOpacity
-            style={styles.checkRow}
-            onPress={() => setReceive(!receiveEmail)}
-          >
-            <View
-              style={[styles.checkbox, receiveEmail && styles.checkboxChecked]}
-            >
-              {receiveEmail && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkLabel}>
-              Nhận email thông báo và ưu đãi từ PCShop
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* ── Hình thức nhận hàng ──────────────────────────── */}
@@ -391,19 +409,39 @@ const CheckoutScreen = ({ route, navigation }) => {
 
           {/* Nhận tại cửa hàng */}
           {deliveryType === "store" && (
-            <View style={styles.storeInfoBox}>
-              <Text style={styles.storeInfoTitle}>📍 Thông tin cửa hàng</Text>
-              <Text style={styles.storeInfoText}>
-                PCShop - 123 Nguyễn Văn A
-              </Text>
-              <Text style={styles.storeInfoText}>Quận 1, TP. Hồ Chí Minh</Text>
-              <Text style={styles.storeInfoText}>📞 0901 234 567</Text>
-              <Text style={styles.storeInfoText}>
-                🕐 8:00 - 21:00 (Thứ 2 - CN)
-              </Text>
-              <Text style={styles.storeNote}>
-                💡 Vui lòng mang theo CMND/CCCD khi đến nhận hàng
-              </Text>
+            <View>
+              {storeLoading ? (
+                <View style={styles.loadingBox}>
+                  <ActivityIndicator size="small" color="#E53935" />
+                  <Text style={styles.loadingText}>Đang lấy thông tin cửa hàng...</Text>
+                </View>
+              ) : defaultStore ? (
+                <View style={styles.storeInfoBox}>
+                  <Text style={styles.storeInfoTitle}>📍 Thông tin cửa hàng</Text>
+                  <Text style={styles.storeInfoText}>
+                    PCShop - {defaultStore.name}
+                  </Text>
+                  <Text style={styles.storeInfoText}>{defaultStore.address}</Text>
+                  {defaultStore.phone && (
+                    <Text style={styles.storeInfoText}>📞 {defaultStore.phone}</Text>
+                  )}
+                  {defaultStore.openingHours && (
+                    <Text style={styles.storeInfoText}>
+                      🕐 {defaultStore.openingHours}
+                    </Text>
+                  )}
+                  <Text style={styles.storeNote}>
+                    💡 Vui lòng mang theo CMND/CCCD khi đến nhận hàng
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.storeInfoBox}>
+                  <Text style={styles.storeInfoTitle}>📍 Thông tin cửa hàng</Text>
+                  <Text style={styles.storeInfoText}>
+                    Không thể tải thông tin cửa hàng. Vui lòng thử lại.
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -629,25 +667,6 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 14, color: "#1a1a1a" },
   clearIcon: { fontSize: 14, color: "#bbb", padding: 4 },
-
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 10,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderColor: "#ccc",
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxChecked: { backgroundColor: "#E53935", borderColor: "#E53935" },
-  checkmark: { color: "#fff", fontSize: 11, fontWeight: "bold" },
-  checkLabel: { fontSize: 13, color: "#444", flex: 1 },
 
   deliveryToggle: {
     flexDirection: "row",
