@@ -1,4 +1,5 @@
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ⚠️ QUAN TRỌNG:'
 // Đây là Backend, tuỳ thuộc vào cách mở app expo mà chỉnh baseURL cho phù hợp:
@@ -17,8 +18,7 @@ const API = axios.create({
 // Gắn token vào header nếu có
 API.interceptors.request.use(async (config) => {
   try {
-    const storedUser = await import("@react-native-async-storage/async-storage")
-      .then((m) => m.default.getItem("currentUser"));
+    const storedUser = await AsyncStorage.getItem("currentUser");
 
     if (storedUser) {
       const user = JSON.parse(storedUser);
@@ -31,6 +31,19 @@ API.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// Xử lý response error
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      console.warn("401 Unauthorized - Token might be expired or invalid");
+      // Don't automatically clear token here - let user retry with login
+      // Clearing token aggressively causes logout cascade
+    }
+    return Promise.reject(error);
+  }
+);
 
 // API login
 export const loginApi = (data) => {
@@ -53,6 +66,10 @@ export const searchProducts = (keyword) => {
 // Lấy sản phẩm theo danh mục
 export const getProductsByCategory = (category) => {
   return API.get(`/products/category/${category}`);
+};
+
+export const getProductById = (productId) => {
+  return API.get(`/products/${productId}`);
 };
 // Lấy giỏ hàng của user
 export const getCart = () => API.get("/cart");
@@ -94,14 +111,36 @@ export const getProductsByCategoryFiltered = (category, brand, minPrice, maxPric
   API.get(`/products/category/${category}`, { params: { brand, minPrice, maxPrice } });
 
 // ========== PRODUCT REVIEWS API ==========
-export const getProductReviewSummary = (productId) =>
-  API.get(`/products/${productId}/reviews/summary`);
+const getAuthHeaders = async () => {
+  try {
+    const storedUser = await AsyncStorage.getItem("currentUser");
+    const token = storedUser ? JSON.parse(storedUser)?.token : null;
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+  } catch (e) {
+    console.log("review auth header error", e?.message || e);
+  }
+  return {};
+};
 
-export const getProductReviews = (productId, page = 0, size = 5) =>
-  API.get(`/products/${productId}/reviews`, { params: { page, size } });
+export const getProductReviewSummary = async (productId) => {
+  const headers = await getAuthHeaders();
+  return API.get(`/products/${productId}/reviews/summary`, { headers });
+};
 
-export const submitProductReview = (productId, payload) =>
-  API.post(`/products/${productId}/reviews`, payload);
+export const getProductReviews = async (productId, page = 0, size = 5) => {
+  const headers = await getAuthHeaders();
+  return API.get(`/products/${productId}/reviews`, { params: { page, size }, headers });
+};
+
+export const submitProductReview = async (productId, payload) => {
+  const authHeaders = await getAuthHeaders();
+
+  return API.post(`/products/${productId}/reviews`, payload, {
+    headers: authHeaders,
+  });
+};
 
 // ========== MAP / SHIPPING / TRACKING API ==========
 export const getNearbyStores = (lat, lon, radius = 20) =>
@@ -109,6 +148,12 @@ export const getNearbyStores = (lat, lon, radius = 20) =>
 
 export const calculateShipping = (location) =>
   API.post("/shipping/calculate", location);
+
+export const createOrder = (orderData) =>
+  API.post("/orders", orderData);
+
+export const getMyOrderHistory = () =>
+  API.get("/orders/my-history");
 
 export const getOrderTracking = (orderId) =>
   API.get(`/orders/${orderId}/tracking`);

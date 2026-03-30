@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getOrderTracking } from "../services/api";
-import { COLORS } from "../constants/mapTheme";
+import { COLORS, GOONG_API_KEY } from "../constants/mapTheme";
 
 let MapsModule = null;
 try {
@@ -15,13 +16,93 @@ const MapView = MapsModule?.default;
 const Marker = MapsModule?.Marker;
 const Polyline = MapsModule?.Polyline;
 
-const STATUS_STEPS = ["PENDING", "CONFIRMED", "PICKING", "DELIVERING", "DELIVERED"];
+const STATUS_STEPS = ["PENDING", "DELIVERING", "DELIVERED"];
+
+const decodePolyline = (encoded) => {
+  if (!encoded) return [];
+
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const coordinates = [];
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const deltaLat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const deltaLng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lng += deltaLng;
+
+    coordinates.push({
+      latitude: lat / 1e5,
+      longitude: lng / 1e5,
+    });
+  }
+
+  return coordinates;
+};
+
+const normalizeStatus = (status) => {
+  if (status === "DELIVERED") return "DELIVERED";
+  if (status === "DELIVERING" || status === "PICKING" || status === "CONFIRMED") {
+    return "DELIVERING";
+  }
+  return "PENDING";
+};
 
 const OrderTrackingScreen = ({ route }) => {
-  const { orderId } = route.params;
+  const routeOrderId = route?.params?.orderId;
+  const [orderId, setOrderId] = useState(null);
   const [tracking, setTracking] = useState(null);
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
+  const [routeEtaText, setRouteEtaText] = useState(null);
   const [loading, setLoading] = useState(true);
   const timerRef = useRef(null);
+
+  const getGoongRoute = async (origin, destination) => {
+    if (!GOONG_API_KEY) {
+      return null;
+    }
+
+    const endpoint =
+      `https://rsapi.goong.io/Direction?origin=${origin.latitude},${origin.longitude}` +
+      `&destination=${destination.latitude},${destination.longitude}&vehicle=car&api_key=${GOONG_API_KEY}`;
+
+    const response = await fetch(endpoint);
+    const data = await response.json();
+
+    const route = data?.routes?.[0];
+    const encoded = route?.overview_polyline?.points;
+    if (!encoded) {
+      return null;
+    }
+
+    const durationSeconds = route?.legs?.[0]?.duration?.value ?? null;
+
+    return {
+      coordinates: decodePolyline(encoded),
+      durationSeconds,
+    };
+  };
 
   const fetchTracking = async () => {
     try {
@@ -39,14 +120,81 @@ const OrderTrackingScreen = ({ route }) => {
   };
 
   useEffect(() => {
+    const resolveOrderId = async () => {
+      const parsedRouteOrderId = Number(routeOrderId);
+      if (Number.isFinite(parsedRouteOrderId) && parsedRouteOrderId > 0) {
+        setOrderId(parsedRouteOrderId);
+        await AsyncStorage.setItem("lastTrackingOrderId", String(parsedRouteOrderId));
+        return;
+      }
+
+      const savedOrderId = await AsyncStorage.getItem("lastTrackingOrderId");
+      const parsedSavedOrderId = Number(savedOrderId);
+      if (Number.isFinite(parsedSavedOrderId) && parsedSavedOrderId > 0) {
+        setOrderId(parsedSavedOrderId);
+      } else {
+        setLoading(false);
+      }
+    };
+
+    resolveOrderId();
+  }, [routeOrderId]);
+
+  useEffect(() => {
+    if (!orderId) {
+      return undefined;
+    }
+
+    setLoading(true);
     fetchTracking();
-    timerRef.current = setInterval(fetchTracking, 15000);
+    timerRef.current = setInterval(fetchTracking, 10000);
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
   }, [orderId]);
+
+  useEffect(() => {
+    const syncRoute = async () => {
+      if (
+        tracking?.shipperLat == null ||
+        tracking?.shipperLng == null ||
+        tracking?.deliveryLat == null ||
+        tracking?.deliveryLng == null
+      ) {
+        setRouteCoordinates([]);
+        setRouteEtaText(null);
+        return;
+      }
+
+      try {
+        const directions = await getGoongRoute(
+          { latitude: tracking.shipperLat, longitude: tracking.shipperLng },
+          { latitude: tracking.deliveryLat, longitude: tracking.deliveryLng }
+        );
+
+        if (directions?.coordinates?.length > 1) {
+          setRouteCoordinates(directions.coordinates);
+        } else {
+          setRouteCoordinates([]);
+        }
+
+        if (directions?.durationSeconds != null) {
+          const durationMin = Math.max(1, Math.round(directions.durationSeconds / 60));
+          setRouteEtaText(`${durationMin} phút`);
+        } else {
+          setRouteEtaText(null);
+        }
+      } catch (e) {
+        console.log("goong tracking route error", e?.message || e);
+        setRouteCoordinates([]);
+        setRouteEtaText(null);
+      }
+    };
+
+    syncRoute();
+  }, [tracking]);
 
   if (loading) {
     return (
@@ -59,14 +207,20 @@ const OrderTrackingScreen = ({ route }) => {
   if (!tracking) {
     return (
       <SafeAreaView style={styles.center}>
-        <Text style={styles.emptyText}>Không lấy được thông tin đơn hàng.</Text>
+        <Text style={styles.emptyText}>
+          {orderId
+            ? "Không lấy được thông tin đơn hàng."
+            : "Chưa có đơn hàng để theo dõi. Hãy đặt đơn mới để xem tracking."}
+        </Text>
       </SafeAreaView>
     );
   }
 
-  const currentStep = Math.max(0, STATUS_STEPS.indexOf(tracking.status));
-  const hasDeliveryPoint = tracking.deliveryLat && tracking.deliveryLng;
-  const hasShipper = tracking.status === "DELIVERING" && tracking.shipperLat && tracking.shipperLng;
+  const normalizedStatus = normalizeStatus(tracking.status);
+  const currentStep = Math.max(0, STATUS_STEPS.indexOf(normalizedStatus));
+  const hasDeliveryPoint = tracking.deliveryLat != null && tracking.deliveryLng != null;
+  const hasShipper = tracking.shipperLat != null && tracking.shipperLng != null;
+  const etaToShow = routeEtaText || tracking.estimatedTime;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -93,13 +247,17 @@ const OrderTrackingScreen = ({ route }) => {
                 title="Shipper"
               />
               <Polyline
-                coordinates={[
-                  { latitude: tracking.shipperLat, longitude: tracking.shipperLng },
-                  { latitude: tracking.deliveryLat, longitude: tracking.deliveryLng },
-                ]}
+                coordinates={
+                  routeCoordinates.length > 1
+                    ? routeCoordinates
+                    : [
+                        { latitude: tracking.shipperLat, longitude: tracking.shipperLng },
+                        { latitude: tracking.deliveryLat, longitude: tracking.deliveryLng },
+                      ]
+                }
                 strokeColor={COLORS.primary}
                 strokeWidth={3}
-                lineDashPattern={[6, 4]}
+                lineDashPattern={routeCoordinates.length > 1 ? undefined : [6, 4]}
               />
             </>
           ) : null}
@@ -114,11 +272,13 @@ const OrderTrackingScreen = ({ route }) => {
       ) : null}
 
       <View style={styles.statusCard}>
-        {tracking.estimatedTime ? (
+        {etaToShow ? (
           <View style={styles.etaBox}>
-            <Text style={styles.etaText}>Shipper cách bạn khoảng {tracking.estimatedTime}</Text>
+            <Text style={styles.etaText}>Shipper cách bạn khoảng {etaToShow}</Text>
           </View>
         ) : null}
+
+        <Text style={styles.orderCode}>Đơn #{tracking.orderId}</Text>
 
         <Text style={styles.statusLabel}>{tracking.statusLabel}</Text>
 
@@ -142,7 +302,7 @@ const OrderTrackingScreen = ({ route }) => {
         </View>
 
         <View style={styles.labelsRow}>
-          {["Chờ", "Xác nhận", "Lấy hàng", "Đang giao", "Hoàn tất"].map((label, index) => (
+          {["Chờ xác nhận", "Đang giao", "Hoàn tất"].map((label, index) => (
             <Text
               key={label}
               style={[styles.stepLabel, index <= currentStep && styles.stepLabelActive]}
@@ -201,6 +361,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   etaText: { color: COLORS.primary, fontWeight: "700", textAlign: "center" },
+  orderCode: {
+    textAlign: "center",
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginBottom: 4,
+  },
   statusLabel: {
     textAlign: "center",
     color: COLORS.textPrimary,

@@ -13,4 +13,4 @@ export const COLORS = {
 // Derive the host from axios baseURL (e.g. http://ip:8080/api -> http://ip:8080)
 export const API_BASE = (API.defaults.baseURL || "").replace(/\/api\/?$/, "");
 
-export const GOONG_API_KEY = "";
+export const GOONG_API_KEY = (process.env.EXPO_PUBLIC_GOONG_API_KEY || "").trim();
