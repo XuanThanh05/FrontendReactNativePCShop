@@ -16,81 +16,92 @@ import { getMyOrderHistory, getProductById } from "../services/api";
 
 const UserStatisticsReport = ({ navigation }) => {
   const { isLoggedIn } = useAuth();
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Tháng 3/2026 (0-indexed)
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Tháng 3/2026
+  const [activeTab, setActiveTab] = useState("Tất cả"); // State cho Tab
   const [purchaseHistory, setPurchaseHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [errorText, setErrorText] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  // Danh sách các Tab chuẩn
+  const TABS = ["Tất cả", "Chờ xử lý", "Đang giao", "Thành công", "Đã hủy"];
 
   const formatDate = (value) => {
     if (!value) return "";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return "";
-
     const day = String(d.getDate()).padStart(2, "0");
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const year = d.getFullYear();
     return `${day}/${month}/${year}`;
   };
 
-  const mapStatus = (item) => {
-    const tracking = String(item?.trackingStatus || "").toUpperCase();
-    if (tracking === "DELIVERING" || tracking === "PICKING") return "Đang giao";
-    if (tracking === "DELIVERED" || tracking === "CONFIRMED") return "Đã thanh toán";
-
-    const orderStatus = String(item?.status || "").toUpperCase();
-    if (orderStatus === "PAID") return "Đã thanh toán";
-    if (orderStatus === "PENDING") return "Chờ xử lý";
-    return item?.status || "Chưa xác định";
-  };
-
-  const getDeliveryMethod = (item) => {
-    const tracking = String(item?.trackingStatus || "").toUpperCase();
-    if (tracking === "CONFIRMED") return "Nhận tại cửa hàng";
-    if (tracking === "DELIVERING" || tracking === "PICKING" || tracking === "DELIVERED") {
-      return "Giao tận nơi";
-    }
-    return "Không xác định";
-  };
-
   useEffect(() => {
     let cancelled = false;
 
-    const loadHistory = async () => {
+    const fetchOrders = async () => {
       if (!isLoggedIn) {
         setPurchaseHistory([]);
+        setLoading(false);
         return;
       }
 
       setLoading(true);
-      setErrorText("");
       try {
         const res = await getMyOrderHistory();
-        const rows = Array.isArray(res?.data) ? res.data : [];
-        const normalized = rows.map((item, index) => ({
-          id: `${item.orderId}-${item.productId}-${index}`,
-          orderId: item.orderId,
-          productId: item.productId,
-          name: item.productName || "Sản phẩm",
-          image: item.productImage || "",
-          discount: Number(item.productDiscount || 0),
-          date: formatDate(item.createdAt),
-          status: mapStatus(item),
-          deliveryMethod: getDeliveryMethod(item),
-          price: Number(item.unitPrice || 0),
-          quantity: Number(item.quantity || 0),
-          lineTotal: Number(item.lineTotal || 0),
-          createdAt: item.createdAt,
-        }));
+        const rawData = Array.isArray(res?.data) ? res.data : [];
+        
+        // Nhóm các sản phẩm lẻ thành từng đơn hàng (dựa trên orderId)
+        const groupedOrders = {};
+        rawData.forEach(item => {
+          if (!groupedOrders[item.orderId]) {
+            groupedOrders[item.orderId] = {
+              id: item.orderId,
+              date: formatDate(item.createdAt),
+              rawStatus: String(item.status || "").toUpperCase(),
+              trackingStatus: String(item.trackingStatus || "").toUpperCase(),
+              items: [],
+              totalAmount: 0
+            };
+          }
+          groupedOrders[item.orderId].items.push(item);
+          groupedOrders[item.orderId].totalAmount += Number(item.lineTotal || 0);
+        });
 
+        const mappedOrders = Object.values(groupedOrders).map(order => {
+          const firstItem = order.items[0] || {};
+          const extraCount = order.items.length > 1 ? order.items.length - 1 : 0;
+
+          // Map chuẩn Status Backend sang Text hiển thị trên UI
+          let displayStatus = "Thành công";
+          const rawStatus = order.rawStatus;
+          const tracking = order.trackingStatus;
+
+          if (tracking === "DELIVERING" || tracking === "PICKING") displayStatus = "Đang giao";
+          else if (tracking === "DELIVERED" || tracking === "CONFIRMED") displayStatus = "Thành công";
+          else if (rawStatus === "PAID") displayStatus = "Thành công";
+          else if (rawStatus === "PENDING" || rawStatus === "PROCESSING") displayStatus = "Chờ xử lý";
+          else if (rawStatus === "CANCELLED") displayStatus = "Đã hủy";
+
+          return {
+            id: order.id,
+            price: order.totalAmount,
+            date: order.date,
+            status: displayStatus,
+            name: firstItem.productName || `Đơn hàng #${order.id}`,
+            image: firstItem.productImage || "https://via.placeholder.com/150",
+            extraCount: extraCount,
+            discount: Number(firstItem.productDiscount || 0),
+            productId: firstItem.productId // Dùng để mở chi tiết SP
+          };
+        });
+
+        // Sắp xếp đơn mới nhất trên cùng
+        mappedOrders.sort((a, b) => b.id - a.id);
+        
         if (!cancelled) {
-          setPurchaseHistory(normalized);
+          setPurchaseHistory(mappedOrders);
         }
       } catch (error) {
-        if (!cancelled) {
-          console.log("load order history error", error?.response?.data || error?.message || error);
-          setErrorText("Không tải được lịch sử mua hàng. Vui lòng thử lại.");
-          setPurchaseHistory([]);
-        }
+        console.log("Lỗi lấy lịch sử mua hàng:", error?.response?.data || error?.message || error);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -98,9 +109,9 @@ const UserStatisticsReport = ({ navigation }) => {
       }
     };
 
-    loadHistory();
+    fetchOrders();
 
-    const unsubscribe = navigation.addListener("focus", loadHistory);
+    const unsubscribe = navigation.addListener("focus", fetchOrders);
     return () => {
       cancelled = true;
       unsubscribe();
@@ -109,16 +120,20 @@ const UserStatisticsReport = ({ navigation }) => {
 
   const monthString = `${String(currentDate.getMonth() + 1).padStart(2, "0")}/${currentDate.getFullYear()}`;
 
-  const filteredHistory = purchaseHistory.filter((item) =>
+  // 1. Lọc theo tháng
+  const filteredByMonth = purchaseHistory.filter((item) =>
     item.date.endsWith(monthString),
   );
 
-  // Tính tổng chi tiêu và tổng đơn của toàn bộ lịch sử (cố định)
-  const totalSpent = purchaseHistory.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
-  const totalOrders = useMemo(() => {
-    const orderSet = new Set(purchaseHistory.map((item) => item.orderId));
-    return orderSet.size;
-  }, [purchaseHistory]);
+  // 2. Lọc theo Tab (Từ list đã lọc tháng)
+  const filteredHistory = filteredByMonth.filter((item) => {
+    if (activeTab === "Tất cả") return true;
+    return item.status === activeTab;
+  });
+
+  // Tính tổng chi tiêu của toàn bộ lịch sử (Thực tế)
+  const totalSpent = purchaseHistory.reduce((sum, item) => sum + item.price, 0);
+  const totalOrders = purchaseHistory.length;
 
   const prevMonth = () =>
     setCurrentDate(
@@ -130,54 +145,82 @@ const UserStatisticsReport = ({ navigation }) => {
     );
 
   const handleOpenProduct = async (item) => {
-    if (!item?.productId) {
-      return;
-    }
-
+    if (!item?.productId) return;
     try {
       const res = await getProductById(item.productId);
-      const product = res?.data;
-      if (product?.id) {
-        navigation.navigate("Product", { product });
+      if (res?.data?.id) {
+        navigation.navigate("Product", { product: res.data });
       }
     } catch (error) {
-      console.log("open product from history error", error?.response?.data || error?.message || error);
+      console.log("Lỗi mở chi tiết sản phẩm:", error);
     }
   };
 
-  const renderProductItem = ({ item }) => (
-    <TouchableOpacity style={styles.productCard} onPress={() => handleOpenProduct(item)} activeOpacity={0.85}>
-      <View style={styles.imageContainer}>
-        <Image source={{ uri: item.image }} style={styles.productImage} />
-        {item.discount > 0 && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>-{item.discount}%</Text>
-          </View>
-        )}
-      </View>
+  const renderProductItem = ({ item }) => {
+    const isSuccess = item.status === "Đã giao" || item.status === "Thành công" || item.status === "Đã nhận hàng";
 
-      <View style={styles.productInfo}>
-        <View style={styles.productHeader}>
-          <Text style={styles.productDate}>{item.date}</Text>
+    return (
+      <View style={styles.orderCard}>
+        {/* Header: Đơn hàng & Trạng thái */}
+        <View style={styles.orderHeader}>
+          <View style={styles.orderHeaderLeft}>
+            <Text style={styles.orderIdText}>
+              Đơn hàng: <Text style={styles.orderIdHighlight}>#{item.id}</Text>
+            </Text>
+            <Text style={styles.orderDate}>{item.date}</Text>
+          </View>
           <Text
             style={[
-              styles.productStatus,
-              item.status === "Đang giao"
-                ? styles.statusPending
-                : styles.statusDone,
+              styles.orderStatus,
+              isSuccess ? styles.statusSuccess : styles.statusWarning,
             ]}
           >
             {item.status}
           </Text>
         </View>
-        <Text style={styles.productName} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.productMeta}>{item.deliveryMethod}</Text>
-        <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
+
+        <View style={styles.divider} />
+
+        {/* Body: Hình ảnh & Tên sản phẩm */}
+        <View style={styles.orderBody}>
+          <View style={styles.imageWrapper}>
+            <Image source={{ uri: item.image }} style={styles.productImage} />
+            {item.discount > 0 && (
+              <View style={styles.discountBadge}>
+                <Text style={styles.discountText}>-{item.discount}%</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.productInfo}>
+            <Text style={styles.productName} numberOfLines={2}>
+              {item.name}
+            </Text>
+            {item.extraCount > 0 && (
+              <Text style={styles.extraItemsText}>
+                + {item.extraCount} sản phẩm khác
+              </Text>
+            )}
+            <Text style={styles.productPriceRow}>
+              Tổng tiền: <Text style={styles.productPriceValue}>{formatPrice(item.price)}</Text>
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Footer: Tổng tiền & Nút Xem chi tiết */}
+        <View style={styles.orderFooter}>
+          <TouchableOpacity 
+            style={styles.btnDetailFullWidth} 
+            activeOpacity={0.7} 
+            onPress={() => handleOpenProduct(item)}
+          >
+            <Text style={styles.btnDetailTextBlue}>Xem chi tiết</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -195,55 +238,47 @@ const UserStatisticsReport = ({ navigation }) => {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.overviewContainer}>
-          <View style={[styles.card, styles.overviewCard]}>
-            <Text style={styles.cardLabel}>Tổng chi tiêu</Text>
-            <Text style={styles.cardValueHighlight}>
+        <View style={styles.modernOverview}>
+          <View style={styles.modernOverviewItem}>
+            <Text style={styles.modernOverviewLabel}>TỔNG CHI TIÊU</Text>
+            <Text style={styles.modernOverviewValueHighlight}>
               {formatPrice(totalSpent)}
             </Text>
           </View>
-          <View style={styles.overviewRow}>
-            <View style={[styles.card, styles.halfCard]}>
-              <Text style={styles.cardLabel}>Đã mua</Text>
-              <Text style={styles.cardValue}>{totalOrders} đơn</Text>
-            </View>
-            <View style={[styles.card, styles.halfCard]}>
-              <Text style={styles.cardLabel}>Thành viên</Text>
-              <Text style={styles.cardValue}>S-Member</Text>
-            </View>
+          <View style={styles.modernOverviewDivider} />
+          <View style={styles.modernOverviewItem}>
+            <Text style={styles.modernOverviewLabel}>SỐ ĐƠN</Text>
+            <Text style={styles.modernOverviewValue}>
+              {totalOrders}
+            </Text>
           </View>
         </View>
 
         <View style={styles.historyContainer}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Đơn hàng</Text>
+            <View>
+              <Text style={styles.sectionTitle}>ĐƠN HÀNG ĐÃ MUA</Text>
+            </View>
             <View style={styles.monthFilter}>
-              <TouchableOpacity
-                onPress={prevMonth}
-                style={styles.filterBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.filterBtnText}>{"<"}</Text>
-              </TouchableOpacity>
-              <Text style={styles.filterMonthText}>{monthString}</Text>
-              <TouchableOpacity
-                onPress={nextMonth}
-                style={styles.filterBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.filterBtnText}>{">"}</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={prevMonth} style={styles.filterBtn}><Text style={styles.filterBtnText}>{"<"}</Text></TouchableOpacity>
+              <Text style={styles.filterMonthText}>Th{currentDate.getMonth() + 1}.{currentDate.getFullYear()}</Text>
+              <TouchableOpacity onPress={nextMonth} style={styles.filterBtn}><Text style={styles.filterBtnText}>{">"}</Text></TouchableOpacity>
             </View>
           </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16, flexDirection: 'row' }}>
+            {TABS.map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Text style={[styles.tabBtnText, activeTab === tab && styles.tabBtnTextActive]}>{tab}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
           {loading ? (
-            <View style={[styles.cardList, styles.emptyContainer]}>
-              <ActivityIndicator size="small" color="#D70018" />
-              <Text style={styles.emptyText}>Đang tải lịch sử mua hàng...</Text>
-            </View>
-          ) : errorText ? (
-            <View style={[styles.cardList, styles.emptyContainer]}>
-              <Text style={styles.emptyText}>{errorText}</Text>
-            </View>
+            <ActivityIndicator size="large" color="#D70018" style={{ marginTop: 20 }} />
           ) : filteredHistory.length > 0 ? (
             <View style={styles.cardList}>
               <FlatList
@@ -254,9 +289,9 @@ const UserStatisticsReport = ({ navigation }) => {
               />
             </View>
           ) : (
-            <View style={[styles.cardList, styles.emptyContainer]}>
-              <Text style={styles.emptyText}>Chưa có đơn hàng nào.</Text>
-            </View>
+             <View style={[styles.cardList, styles.emptyContainer]}>
+               <Text style={styles.emptyText}>Chưa có đơn hàng nào trong tháng {monthString}.</Text>
+             </View>
           )}
         </View>
 
@@ -299,61 +334,44 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
-  overviewContainer: {
-    marginBottom: 20,
-  },
-  card: {
+  modernOverview: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 18,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardList: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    overflow: "hidden",
-  },
-  overviewCard: {
-    alignItems: "center",
-    paddingVertical: 24,
-    borderWidth: 1,
-    borderColor: "#FEE2E2",
-  },
-  overviewRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    paddingVertical: 20,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  halfCard: {
-    width: "48%",
+  modernOverviewItem: {
+    flex: 1,
     alignItems: "center",
-    marginBottom: 0,
+    justifyContent: "center",
   },
-  cardLabel: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 6,
+  modernOverviewDivider: {
+    width: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 4,
+  },
+  modernOverviewLabel: {
+    fontSize: 11,
+    color: "#9CA3AF",
     fontWeight: "700",
-    textTransform: "uppercase",
+    marginBottom: 6,
+    letterSpacing: 0.5,
   },
-  cardValue: {
+  modernOverviewValueHighlight: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#D70018",
+  },
+  modernOverviewValue: {
     fontSize: 18,
     fontWeight: "800",
     color: "#1F2937",
-  },
-  cardValueHighlight: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#D70018",
   },
 
   sectionHeaderRow: {
@@ -371,116 +389,168 @@ const styles = StyleSheet.create({
   monthFilter: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#E5E7EB",
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
   },
   filterBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   filterBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "900",
-    color: "#D70018",
+    color: "#1E3A8A",
   },
   filterMonthText: {
     fontSize: 13,
-    fontWeight: "800",
-    color: "#1F2937",
-    marginHorizontal: 8,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
+  tabBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    marginRight: 8,
+    backgroundColor: '#FFFFFF',
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabBtnActive: {
+    borderColor: '#1E3A8A',
+  },
+  tabBtnText: {
+    fontSize: 13,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  tabBtnTextActive: {
+    fontSize: 13,
+    color: '#1E3A8A',
+    fontWeight: '700',
   },
   historyContainer: {
     marginBottom: 20,
   },
 
-  productCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+  orderCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
   },
-  imageContainer: {
+  orderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    padding: 14,
+  },
+  orderHeaderLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  orderIdText: {
+    fontSize: 13,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  orderIdHighlight: {
+    color: "#111827",
+    fontWeight: "700",
+  },
+  orderDate: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 4,
+  },
+  orderStatus: {
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    alignSelf: "flex-start",
+  },
+  statusSuccess: {
+    color: "#059669", // Xanh lá
+  },
+  statusWarning: {
+    color: "#EA580C", // Cam
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginHorizontal: 14,
+  },
+  orderBody: {
+    flexDirection: "row",
+    padding: 14,
+  },
+  imageWrapper: {
     position: "relative",
     marginRight: 14,
   },
   productImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 8,
+    width: 68,
+    height: 68,
+    borderRadius: 6,
     backgroundColor: "#FFFFFF",
     resizeMode: "contain",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#F3F4F6",
   },
   discountBadge: {
     position: "absolute",
     top: -6,
     left: -6,
-    backgroundColor: "#D70018",
+    backgroundColor: "#DC2626", // Đỏ chuẩn
     borderRadius: 4,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingVertical: 2,
     zIndex: 1,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    elevation: 1,
   },
-  discountText: { color: "#fff", fontSize: 10, fontWeight: "800" },
-
+  discountText: { color: "#fff", fontSize: 10, fontWeight: "700" },
   productInfo: {
     flex: 1,
-  },
-  productHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-    alignItems: "center",
-  },
-  productDate: {
-    fontSize: 12,
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-  productStatus: {
-  productMeta: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-    fontWeight: "600",
-  },
-    fontSize: 10,
-    fontWeight: "800",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    textTransform: "uppercase",
-  },
-  statusDone: {
-    backgroundColor: "#DEF7EC",
-    color: "#03543F",
-    borderWidth: 1,
-    borderColor: "#31C48D",
-  },
-  statusPending: {
-    backgroundColor: "#FEF3C7",
-    color: "#D97706",
-    borderWidth: 1,
-    borderColor: "#FACA15",
+    justifyContent: "center",
   },
   productName: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#1F2937",
-    marginBottom: 6,
     lineHeight: 20,
   },
-  productPrice: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#D70018",
+  extraItemsText: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 6,
+    fontStyle: "italic",
+  },
+  productPriceRow: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginTop: 8,
+  },
+  productPriceValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  orderFooter: {
+    padding: 0,
+    backgroundColor: "#FFFFFF",
+  },
+  btnDetailFullWidth: {
+    width: '100%',
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnDetailTextBlue: {
+    fontSize: 14,
+    color: "#1E3A8A", // Màu xanh TGDĐ
+    fontWeight: "600",
   },
 
   emptyContainer: {
