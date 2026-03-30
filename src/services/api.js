@@ -6,12 +6,16 @@ import axios from "axios";
 // iOS Simulator → localhost
 // Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10) 
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
+// http://161.118.200.236/api
+
+const API_BASE_URL = "http://161.118.200.236/api";
 
 const API = axios.create({
-  baseURL: "http://192.168.10.104:8080/api",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 15000,
 });
 
 // Gắn token vào header nếu có
@@ -31,6 +35,16 @@ API.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const requestUrl = `${error?.config?.baseURL || ""}${error?.config?.url || ""}`;
+    console.log("API error:", { status, requestUrl, message: error?.message });
+    return Promise.reject(error);
+  }
+);
 
 // API login
 export const loginApi = (data) => {
