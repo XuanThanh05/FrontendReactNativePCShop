@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useState } from "react";
-import { getAuthMe, loginApi } from "../services/api";
+import { getAuthMe, loginApi, registerApi } from "../services/api";
 
 const AuthContext = createContext();
 
@@ -54,9 +54,9 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // 🔐 LOGIN REAL API
-  const login = async (username, password) => {
+  const login = async (identifier, password) => {
     try {
-      const res = await loginApi({ username, password });
+      const res = await loginApi({ identifier: identifier?.trim(), password });
 
       const data = res.data;
 
@@ -88,6 +88,69 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const register = async ({ username, email, password, fullName, phone, address }) => {
+    try {
+      const payload = {
+        username: username.trim(),
+        email: email.trim(),
+        password,
+        fullName: fullName.trim(),
+        phone: phone?.trim() || "",
+        address: address?.trim() || "",
+      };
+
+      const res = await registerApi(payload);
+      const data = res.data || {};
+
+      const normalizedRole = (data.role || "ROLE_CUSTOMER")
+        .toLowerCase()
+        .replace("role_", "");
+
+      const user = {
+        username: data.username || payload.username,
+        role: normalizedRole,
+        customerId: data.customerId || "",
+        token: data.accessToken,
+        fullName: data.fullName || payload.fullName,
+        phone: data.phone || payload.phone,
+        email: data.email || payload.email,
+        address: data.address || payload.address,
+      };
+
+      setCurrentUser(user);
+      await AsyncStorage.setItem("currentUser", JSON.stringify(user));
+
+      return {
+        success: true,
+        user,
+        message: data.message || "Đăng ký thành công",
+      };
+    } catch (err) {
+      console.log("Register error:", err.response?.data || err.message);
+
+      const rawMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "";
+
+      let normalizedMessage = rawMessage;
+      if (/phone/i.test(rawMessage)) {
+        normalizedMessage = "Số điện thoại đã tồn tại. Vui lòng dùng số khác.";
+      } else if (/email/i.test(rawMessage)) {
+        normalizedMessage = "Email đã tồn tại. Vui lòng dùng email khác.";
+      } else if (/username/i.test(rawMessage)) {
+        normalizedMessage = "Username đã tồn tại. Vui lòng chọn username khác.";
+      }
+
+      return {
+        success: false,
+        message:
+          normalizedMessage ||
+          "Đăng ký thất bại",
+      };
+    }
+  };
+
   // 🚪 LOGOUT
   const logout = async () => {
     setCurrentUser(null);
@@ -98,7 +161,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ currentUser, isLoggedIn, login, logout, loading }}
+      value={{ currentUser, isLoggedIn, login, register, logout, loading }}
     >
       {!loading && children}
     </AuthContext.Provider>

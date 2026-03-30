@@ -255,7 +255,7 @@ const UserStatisticsReport = ({ navigation }) => {
             </View>
           ) : (
             <View style={[styles.cardList, styles.emptyContainer]}>
-              <Text style={styles.emptyText}>Chưa có đơn hàng nào.</Text>
+              <Text style={styles.emptyText}>Chưa có đơn hàng nào trong tháng {monthString}.</Text>
             </View>
           )}
         </View>

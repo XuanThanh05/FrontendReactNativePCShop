@@ -672,6 +672,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    minWidth: 70,  
+    alignItems: "center",  
   },
   pageBtnDisabled: { backgroundColor: "#d7d7d7" },
   pageBtnText: { color: "#fff", fontWeight: "700" },
