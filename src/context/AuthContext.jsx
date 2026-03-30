@@ -4,6 +4,47 @@ import { getAuthMe, loginApi, registerApi } from "../services/api";
 
 const AuthContext = createContext();
 
+const parseRegisterErrorMessage = (err) => {
+  const rawMessage =
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    "";
+  const message = String(rawMessage).toLowerCase();
+
+  if (message.includes("phone") && (message.includes("exists") || message.includes("duplicate"))) {
+    return "Số điện thoại đã tồn tại. Vui lòng dùng số khác.";
+  }
+  if (message.includes("email") && (message.includes("exists") || message.includes("duplicate"))) {
+    return "Email đã tồn tại. Vui lòng dùng email khác.";
+  }
+  if (message.includes("username") && (message.includes("exists") || message.includes("duplicate"))) {
+    return "Username đã tồn tại. Vui lòng chọn username khác.";
+  }
+
+  if (message.includes("phone number format is invalid")) {
+    return "Số điện thoại không đúng định dạng. Vui lòng nhập 8-20 ký tự số.";
+  }
+  if (message.includes("email is invalid")) {
+    return "Email không hợp lệ. Vui lòng kiểm tra lại.";
+  }
+  if (message.includes("password must be between")) {
+    return "Mật khẩu phải có từ 8 đến 64 ký tự.";
+  }
+  if (message.includes("username must be between")) {
+    return "Username phải có từ 4 đến 50 ký tự.";
+  }
+  if (message.includes("full name is required")) {
+    return "Vui lòng nhập họ và tên.";
+  }
+
+  if (err?.response?.status === 409) {
+    return "Thông tin đăng ký đã tồn tại. Vui lòng kiểm tra username, số điện thoại hoặc email.";
+  }
+
+  return rawMessage || "Đăng ký thất bại. Vui lòng thử lại.";
+};
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -121,25 +162,9 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.log("Register error:", err.response?.data || err.message);
 
-      const rawMessage =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        "";
-
-      let normalizedMessage = rawMessage;
-      if (/phone/i.test(rawMessage)) {
-        normalizedMessage = "Số điện thoại đã tồn tại. Vui lòng dùng số khác.";
-      } else if (/email/i.test(rawMessage)) {
-        normalizedMessage = "Email đã tồn tại. Vui lòng dùng email khác.";
-      } else if (/username/i.test(rawMessage)) {
-        normalizedMessage = "Username đã tồn tại. Vui lòng chọn username khác.";
-      }
-
       return {
         success: false,
-        message:
-          normalizedMessage ||
-          "Đăng ký thất bại",
+        message: parseRegisterErrorMessage(err),
       };
     }
   };

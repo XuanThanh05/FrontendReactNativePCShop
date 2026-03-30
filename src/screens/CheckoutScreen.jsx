@@ -17,7 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { calculateShipping, getNearbyStores } from "../services/api";
+import { calculateShipping, createOrder, getNearbyStores } from "../services/api";
 import { useUserLocation } from "../hooks/useUserLocation";
 
 const CheckoutScreen = ({ route, navigation }) => {
@@ -48,6 +48,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [deliveryError, setDeliveryError] = useState("");
   const [defaultStore, setDefaultStore] = useState(null);
   const [storeLoading, setStoreLoading] = useState(false);
+  const [placingOrder, setPlacingOrder] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -201,6 +202,10 @@ const CheckoutScreen = ({ route, navigation }) => {
 
   // ── Validate ─────────────────────────────────────────────────
   const validate = () => {
+    if (!currentUser?.token) {
+      Alert.alert("Chưa đăng nhập", "Vui lòng đăng nhập trước khi đặt hàng.");
+      return false;
+    }
     if (!buyerName.trim()) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập họ và tên");
       return false;
@@ -234,6 +239,74 @@ const CheckoutScreen = ({ route, navigation }) => {
     return true;
   };
 
+  const buildOrderPayload = () => {
+    const items = checkoutItems
+      .map((item) => {
+        const productId = item.productId ?? item.id;
+        const quantity = Number(item.quantity || 1);
+        const priceAtPurchase = Number(item.price || 0);
+
+        if (!productId || quantity <= 0) {
+          return null;
+        }
+
+        return {
+          productId,
+          quantity,
+          priceAtPurchase,
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      totalAmount: Number(finalTotal),
+      deliveryType,
+      buyerName: buyerName.trim(),
+      buyerPhone: buyerPhone.trim(),
+      email: email?.trim() || null,
+      city: city?.trim() || null,
+      district: district?.trim() || null,
+      address: address?.trim() || null,
+      latitude: selectedLocation?.latitude ?? null,
+      longitude: selectedLocation?.longitude ?? null,
+      items,
+    };
+  };
+
+  const executePlaceOrder = async () => {
+    try {
+      setPlacingOrder(true);
+      const payload = buildOrderPayload();
+      const response = await createOrder(payload);
+      const createdOrderId = response?.data?.orderId;
+
+      if (!createdOrderId) {
+        throw new Error("Đơn hàng tạo thành công nhưng thiếu mã đơn hàng.");
+      }
+
+      if (!product) {
+        await clearCart();
+      }
+
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: "Main" },
+          { name: "OrderTracking", params: { orderId: createdOrderId } },
+        ],
+      });
+    } catch (e) {
+      const message =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Không thể tạo đơn hàng. Vui lòng thử lại.";
+      Alert.alert("Đặt hàng thất bại", message);
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
+
   // ── Xác nhận đặt hàng ────────────────────────────────────────
   const handleOrder = () => {
     if (!validate()) return;
@@ -250,18 +323,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         { text: "Huỷ", style: "cancel" },
         {
           text: "Xác nhận đặt hàng",
-          onPress: () => {
-            setTimeout(() => {
-              if (!product) clearCart();
-              navigation.reset({
-                index: 1,
-                routes: [
-                  { name: "Main" },
-                  { name: "OrderTracking", params: { orderId: 2 } },
-                ],
-              });
-            }, 300);
-          },
+          onPress: executePlaceOrder,
         },
       ],
     );
@@ -584,10 +646,10 @@ const CheckoutScreen = ({ route, navigation }) => {
         <TouchableOpacity
           style={styles.orderBtn}
           onPress={handleOrder}
-          disabled={deliveryType === "ship" && (deliveryLoading || !shippingInfo || !selectedStore)}
+          disabled={placingOrder || (deliveryType === "ship" && (deliveryLoading || !shippingInfo || !selectedStore))}
           activeOpacity={0.85}
         >
-          <Text style={styles.orderBtnText}>Đặt hàng</Text>
+          <Text style={styles.orderBtnText}>{placingOrder ? "Đang xử lý..." : "Đặt hàng"}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

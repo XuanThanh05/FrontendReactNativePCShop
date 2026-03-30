@@ -18,6 +18,19 @@ const API = axios.create({
 // Gắn token vào header nếu có
 API.interceptors.request.use(async (config) => {
   try {
+    const requestUrl = String(config.url || "");
+    const isPublicAuthRequest =
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/register") ||
+      requestUrl.includes("/auth/logout");
+
+    if (isPublicAuthRequest) {
+      if (config.headers?.Authorization) {
+        delete config.headers.Authorization;
+      }
+      return config;
+    }
+
     const storedUser = await import("@react-native-async-storage/async-storage")
       .then((m) => m.default.getItem("currentUser"));
 
@@ -121,6 +134,8 @@ export const getOrderTracking = (orderId) =>
 export const updateShipperLocation = (orderId, location) =>
   API.put(`/orders/${orderId}/shipper-location`, location);
 
-export const getUserOrders = () => API.get("/orders/my-orders");
+export const createOrder = (payload) => API.post("/orders", payload);
+
+export const getUserOrders = () => API.get("/orders/my-history");
 
 export default API;

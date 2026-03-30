@@ -2,7 +2,7 @@ name: Discord - Pretty commit notification
 
 on:
   push:
-    branches: [ main ]            # đổi thành ['**'] nếu muốn mọi nhánh
+    branches: [ '**' ]            # đổi thành ['**'] nếu muốn mọi nhánh
   workflow_dispatch:              # chạy test thủ công trong tab Actions
 
 jobs:
