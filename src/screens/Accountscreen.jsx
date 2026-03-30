@@ -57,12 +57,12 @@ const AccountScreen = ({ navigation }) => {
           <View style={styles.welcomeInfo}>
             <Text style={styles.welcomeTitle}>
               {isLoggedIn
-                ? `Chào ${currentUser.fullName}`
+                ? `Chào ${currentUser?.fullName || currentUser?.username || "bạn"}`
                 : "Chào mừng bạn đến với PCShop"}
             </Text>
             <Text style={styles.welcomeSub}>
               {isLoggedIn
-                ? currentUser.phone
+                ? currentUser?.phone || currentUser?.email || ""
                 : "Đăng nhập để không bỏ lỡ các ưu đãi hấp dẫn."}
             </Text>
           </View>

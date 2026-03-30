@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useState } from "react";
-import { loginApi } from "../services/api";
+import { getAuthMe, loginApi } from "../services/api";
 
 const AuthContext = createContext();
 
@@ -14,7 +14,28 @@ export const AuthProvider = ({ children }) => {
       try {
         const storedUser = await AsyncStorage.getItem("currentUser");
         if (storedUser) {
-          setCurrentUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          setCurrentUser(parsedUser);
+
+          // Hydrate profile fields if app has token but stale local data.
+          if (parsedUser?.token) {
+            try {
+              const meRes = await getAuthMe();
+              const meData = meRes?.data || {};
+              const hydratedUser = {
+                ...parsedUser,
+                fullName: meData.fullName || parsedUser.fullName || parsedUser.username || "",
+                phone: meData.phone || parsedUser.phone || "",
+                email: meData.email || parsedUser.email || "",
+                address: meData.address || parsedUser.address || "",
+                customerId: meData.customerId || parsedUser.customerId || "",
+              };
+              setCurrentUser(hydratedUser);
+              await AsyncStorage.setItem("currentUser", JSON.stringify(hydratedUser));
+            } catch (e) {
+              console.log("Hydrate profile error:", e?.response?.data || e?.message || e);
+            }
+          }
         }
       } catch (error) {
         console.error("Load user error:", error);
@@ -40,6 +61,10 @@ export const AuthProvider = ({ children }) => {
         role: normalizedRole,
         customerId: data.customerId,
         token: data.accessToken,
+        fullName: data.fullName || data.username || "",
+        phone: data.phone || "",
+        email: data.email || "",
+        address: data.address || "",
       };
 
       setCurrentUser(user);

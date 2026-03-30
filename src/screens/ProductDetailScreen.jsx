@@ -3,19 +3,28 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPrice } from "../constants/mockData";
 import { parseProductSpecs } from "../constants/productSpecs";
-import { getProductsByCategory, getProductsPaged } from "../services/api";
+import {
+  getProductReviewSummary,
+  getProductReviews,
+  getProductsByCategory,
+  getProductsPaged,
+  submitProductReview,
+} from "../services/api";
+import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useComparison } from "../context/ComparisonContext";
 import ComparisonDock from "../components/comparison/ComparisonDock";
@@ -194,11 +203,19 @@ const ProductDetailScreen = ({ route, navigation }) => {
   // normalize ngay khi nhận params — xử lý cả ProductDTO lẫn shape cũ
   const product = normalizeProduct(route.params.product);
 
+  const { isLoggedIn } = useAuth();
   const { addToCart, totalItems } = useCart();
   const { addToComparison, removeFromComparison, isInComparison } = useComparison();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState(null);
+  const [reviewItems, setReviewItems] = useState([]);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   // Gallery ưu tiên từ API (tag: gallery:url1;url2;...), luôn bao gồm ảnh chính.
   const THUMBNAIL_IMAGES = Array.from(
@@ -275,6 +292,43 @@ const ProductDetailScreen = ({ route, navigation }) => {
     setCurrentImageIndex(0);
   }, [product.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadReviewData = async () => {
+      setReviewLoading(true);
+      try {
+        const [summaryRes, reviewsRes] = await Promise.all([
+          getProductReviewSummary(product.id),
+          getProductReviews(product.id, 0, 5),
+        ]);
+
+        if (!cancelled) {
+          setReviewSummary(summaryRes?.data || null);
+          setReviewItems(Array.isArray(reviewsRes?.data?.content) ? reviewsRes.data.content : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.log("load review data error", error?.response?.data || error?.message || error);
+          setReviewSummary(null);
+          setReviewItems([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setReviewLoading(false);
+        }
+      }
+    };
+
+    if (product.id) {
+      loadReviewData();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product.id, isLoggedIn]);
+
   const toggleCombo = (id) => {
     setCombos(prev => prev.map(item =>
       item.id === id ? { ...item, checked: !item.checked } : item
@@ -344,9 +398,79 @@ const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const currentImage = THUMBNAIL_IMAGES[currentImageIndex] || product.image;
-  const rating       = Math.round(product.rating || 0);
+  const averageRating = reviewSummary?.averageRating ?? product.rating ?? 0;
+  const totalReviewCount = reviewSummary?.totalReviews ?? product.reviews ?? 0;
+  const rating = Math.round(averageRating || 0);
+  const ratingBreakdown = [
+    { star: 5, count: reviewSummary?.fiveStar ?? 0 },
+    { star: 4, count: reviewSummary?.fourStar ?? 0 },
+    { star: 3, count: reviewSummary?.threeStar ?? 0 },
+    { star: 2, count: reviewSummary?.twoStar ?? 0 },
+    { star: 1, count: reviewSummary?.oneStar ?? 0 },
+  ];
   const outOfStock   = product.stock === 0;
   const stockLabel   = outOfStock ? "Hết hàng" : "Sẵn hàng";
+
+  const handleReviewButtonPress = () => {
+    if (!isLoggedIn) {
+      Alert.alert(
+        "Bạn chưa đăng nhập",
+        "Vui lòng đăng nhập để viết đánh giá.",
+        [
+          { text: "Để sau", style: "cancel" },
+          { text: "Đăng nhập", onPress: () => navigation.navigate("Login") },
+        ]
+      );
+      return;
+    }
+
+    if (!reviewSummary?.canReview) {
+      Alert.alert("Chưa thể đánh giá", "Bạn chỉ có thể đánh giá sản phẩm đã mua.");
+      return;
+    }
+
+    const myReview = reviewItems.find((item) => item.mine);
+    if (myReview) {
+      setReviewRating(myReview.rating || 5);
+      setReviewComment(myReview.comment || "");
+    }
+    setShowReviewForm((prev) => !prev);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!isLoggedIn) {
+      Alert.alert("Bạn chưa đăng nhập", "Vui lòng đăng nhập để viết đánh giá.");
+      return;
+    }
+
+    if (!reviewSummary?.canReview) {
+      Alert.alert("Chưa thể đánh giá", "Bạn chỉ có thể đánh giá sản phẩm đã mua.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      await submitProductReview(product.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+      });
+
+      const [summaryRes, reviewsRes] = await Promise.all([
+        getProductReviewSummary(product.id),
+        getProductReviews(product.id, 0, 5),
+      ]);
+
+      setReviewSummary(summaryRes?.data || null);
+      setReviewItems(Array.isArray(reviewsRes?.data?.content) ? reviewsRes.data.content : []);
+      setShowReviewForm(false);
+      Alert.alert("Thành công", "Đánh giá của bạn đã được lưu.");
+    } catch (error) {
+      const backendMessage = error?.response?.data?.error || error?.response?.data?.message;
+      Alert.alert("Không thể gửi đánh giá", backendMessage || "Đã có lỗi xảy ra, vui lòng thử lại.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -627,29 +751,100 @@ const ProductDetailScreen = ({ route, navigation }) => {
         {/* Đánh giá */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Đánh giá từ khách hàng</Text>
-          <View style={styles.ratingOverview}>
-            <View style={styles.ratingLeft}>
-              <Text style={styles.ratingBig}>{(product.rating || 0).toFixed(1)}</Text>
-              <Text style={[styles.stars, { fontSize: 18 }]}>
-                {"★".repeat(Math.round(product.rating || 0))}
-              </Text>
-              <Text style={styles.reviewCountSub}>{product.reviews || 0} đánh giá</Text>
+          {reviewLoading ? (
+            <View style={styles.relatedStateBox}>
+              <ActivityIndicator size="small" color={ORANGE} />
+              <Text style={styles.relatedStateText}>Đang tải đánh giá...</Text>
             </View>
-            <View style={styles.ratingBars}>
-              {[5, 4, 3, 2, 1].map(star => (
-                <View key={star} style={styles.ratingBarRow}>
-                  <Text style={styles.ratingBarLabel}>{star}★</Text>
-                  <View style={styles.ratingBarTrack}>
-                    <View style={styles.ratingBarFill} />
-                  </View>
-                  <Text style={styles.ratingBarCount}>0</Text>
+          ) : (
+            <>
+              <View style={styles.ratingOverview}>
+                <View style={styles.ratingLeft}>
+                  <Text style={styles.ratingBig}>{Number(averageRating || 0).toFixed(1)}</Text>
+                  <Text style={[styles.stars, { fontSize: 18 }]}>
+                    {"★".repeat(Math.round(averageRating || 0))}
+                  </Text>
+                  <Text style={styles.reviewCountSub}>{totalReviewCount || 0} đánh giá</Text>
                 </View>
-              ))}
-            </View>
-          </View>
-          <TouchableOpacity activeOpacity={0.8} style={styles.btnReview}>
-            <Text style={styles.btnReviewText}>Viết đánh giá</Text>
-          </TouchableOpacity>
+                <View style={styles.ratingBars}>
+                  {ratingBreakdown.map((item) => {
+                    const widthPercent = totalReviewCount > 0
+                      ? Math.round((item.count / totalReviewCount) * 100)
+                      : 0;
+                    return (
+                      <View key={item.star} style={styles.ratingBarRow}>
+                        <Text style={styles.ratingBarLabel}>{item.star}★</Text>
+                        <View style={styles.ratingBarTrack}>
+                          <View style={[styles.ratingBarFill, { width: `${widthPercent}%` }]} />
+                        </View>
+                        <Text style={styles.ratingBarCount}>{item.count}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <TouchableOpacity activeOpacity={0.8} style={styles.btnReview} onPress={handleReviewButtonPress}>
+                <Text style={styles.btnReviewText}>
+                  {!isLoggedIn
+                    ? "Đăng nhập để đánh giá"
+                    : reviewSummary?.hasReviewed
+                      ? "Chỉnh sửa đánh giá của bạn"
+                      : "Viết đánh giá"}
+                </Text>
+              </TouchableOpacity>
+
+              {showReviewForm && (
+                <View style={styles.reviewFormCard}>
+                  <Text style={styles.reviewFormTitle}>Đánh giá của bạn</Text>
+                  <View style={styles.reviewStarRow}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity
+                        key={star}
+                        style={styles.reviewStarBtn}
+                        onPress={() => setReviewRating(star)}
+                      >
+                        <Text style={[styles.reviewStarText, star <= reviewRating && styles.reviewStarTextActive]}>
+                          ★
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TextInput
+                    value={reviewComment}
+                    onChangeText={setReviewComment}
+                    placeholder="Chia sẻ trải nghiệm của bạn với sản phẩm..."
+                    multiline
+                    style={styles.reviewInput}
+                  />
+                  <TouchableOpacity
+                    style={[styles.btnMain, reviewSubmitting && styles.btnDisabled]}
+                    disabled={reviewSubmitting}
+                    onPress={handleSubmitReview}
+                  >
+                    <Text style={styles.btnMainText}>{reviewSubmitting ? "ĐANG GỬI..." : "GỬI ĐÁNH GIÁ"}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {reviewItems.length > 0 ? (
+                <View style={styles.reviewListWrap}>
+                  {reviewItems.map((item) => (
+                    <View key={item.id} style={styles.reviewItemCard}>
+                      <View style={styles.reviewItemHeader}>
+                        <Text style={styles.reviewUsername}>{item.username}</Text>
+                        <Text style={styles.reviewDate}>{item.createdAt}</Text>
+                      </View>
+                      <Text style={styles.reviewStars}>{"★".repeat(item.rating || 0)}</Text>
+                      {item.comment ? <Text style={styles.reviewComment}>{item.comment}</Text> : null}
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.reviewEmptyText}>Chưa có đánh giá nào cho sản phẩm này.</Text>
+              )}
+            </>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -889,6 +1084,33 @@ const styles = StyleSheet.create({
   ratingBarCount:  { fontSize: 11, color: TEXT_MUTED, width: 14, textAlign: "right" },
   btnReview:       { borderWidth: 1.5, borderColor: ORANGE, borderRadius: 6, paddingVertical: 10, alignItems: "center", marginBottom: 10 },
   btnReviewText:   { color: ORANGE, fontSize: 14, fontWeight: "600" },
+  reviewFormCard:  { borderWidth: 1, borderColor: "#F3D5C2", borderRadius: 8, padding: 12, backgroundColor: "#FFF9F5", marginBottom: 12 },
+  reviewFormTitle: { fontSize: 13, fontWeight: "700", color: TEXT_MAIN, marginBottom: 8 },
+  reviewStarRow:   { flexDirection: "row", marginBottom: 10, gap: 6 },
+  reviewStarBtn:   { paddingVertical: 4, paddingHorizontal: 2 },
+  reviewStarText:  { fontSize: 26, color: "#D1D5DB" },
+  reviewStarTextActive: { color: "#F5A623" },
+  reviewInput: {
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    textAlignVertical: "top",
+    marginBottom: 10,
+    fontSize: 13,
+    color: TEXT_MAIN,
+  },
+  reviewListWrap:  { marginTop: 4, gap: 8 },
+  reviewItemCard:  { borderWidth: 1, borderColor: "#ECECEC", borderRadius: 8, backgroundColor: "#FFFFFF", padding: 10 },
+  reviewItemHeader:{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  reviewUsername:  { fontSize: 12, fontWeight: "700", color: TEXT_MAIN },
+  reviewDate:      { fontSize: 10, color: TEXT_MUTED },
+  reviewStars:     { fontSize: 13, color: "#F5A623", marginBottom: 4 },
+  reviewComment:   { fontSize: 12, color: "#4B5563", lineHeight: 18 },
+  reviewEmptyText: { fontSize: 12, color: TEXT_MUTED, fontStyle: "italic" },
 
   relatedGrid:         { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   relatedCard:         { width: "48.5%", backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 0.5, borderColor: DIVIDER_COLOR, overflow: "hidden" },

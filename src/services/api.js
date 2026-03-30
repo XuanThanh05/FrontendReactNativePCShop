@@ -8,7 +8,7 @@ import axios from "axios";
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
 
 const API = axios.create({
-  baseURL: "http://192.168.10.104:8080/api",
+  baseURL: "http://192.168.10.103:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -35,6 +35,10 @@ API.interceptors.request.use(async (config) => {
 // API login
 export const loginApi = (data) => {
   return API.post("/auth/login", data);
+};
+
+export const getAuthMe = () => {
+  return API.get("/auth/me");
 };
 // Lấy sản phẩm có phân trang
 export const getProductsPaged = (page = 0, size = 10) => {
@@ -88,6 +92,16 @@ export const getTopByCategory = (category) =>
 // Lấy sản phẩm theo category (đã có, nhưng thêm filter brand + price)
 export const getProductsByCategoryFiltered = (category, brand, minPrice, maxPrice) =>
   API.get(`/products/category/${category}`, { params: { brand, minPrice, maxPrice } });
+
+// ========== PRODUCT REVIEWS API ==========
+export const getProductReviewSummary = (productId) =>
+  API.get(`/products/${productId}/reviews/summary`);
+
+export const getProductReviews = (productId, page = 0, size = 5) =>
+  API.get(`/products/${productId}/reviews`, { params: { page, size } });
+
+export const submitProductReview = (productId, payload) =>
+  API.post(`/products/${productId}/reviews`, payload);
 
 // ========== MAP / SHIPPING / TRACKING API ==========
 export const getNearbyStores = (lat, lon, radius = 20) =>
