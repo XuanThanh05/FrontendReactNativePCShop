@@ -47,9 +47,9 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // 🔐 LOGIN REAL API
-  const login = async (username, password) => {
+  const login = async (identifier, password) => {
     try {
-      const res = await loginApi({ username, password });
+      const res = await loginApi({ identifier: identifier?.trim(), password });
 
       const data = res.data;
 
@@ -121,11 +121,24 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.log("Register error:", err.response?.data || err.message);
 
+      const rawMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "";
+
+      let normalizedMessage = rawMessage;
+      if (/phone/i.test(rawMessage)) {
+        normalizedMessage = "Số điện thoại đã tồn tại. Vui lòng dùng số khác.";
+      } else if (/email/i.test(rawMessage)) {
+        normalizedMessage = "Email đã tồn tại. Vui lòng dùng email khác.";
+      } else if (/username/i.test(rawMessage)) {
+        normalizedMessage = "Username đã tồn tại. Vui lòng chọn username khác.";
+      }
+
       return {
         success: false,
         message:
-          err.response?.data?.message ||
-          err.response?.data?.error ||
+          normalizedMessage ||
           "Đăng ký thất bại",
       };
     }

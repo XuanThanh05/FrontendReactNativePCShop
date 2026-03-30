@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
+  Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -18,32 +19,78 @@ const LoginScreen = ({ navigation }) => {
   const { login } = useAuth();
   const keyboardOffset = Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0;
 
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState("");
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultType, setResultType] = useState("success");
+  const [resultMessage, setResultMessage] = useState("");
+  const resultAnim = useRef(new Animated.Value(0)).current;
+  const autoCloseTimerRef = useRef(null);
+
+  const handleCloseResultModal = useCallback((navigateToMain = false) => {
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+    setShowResultModal(false);
+    if (navigateToMain) {
+      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+    }
+  }, [navigation]);
+
+  useEffect(() => {
+    if (!showResultModal) return;
+
+    resultAnim.setValue(0);
+    Animated.timing(resultAnim, {
+      toValue: 1,
+      duration: 260,
+      useNativeDriver: true,
+    }).start();
+
+    if (resultType === "success") {
+      autoCloseTimerRef.current = setTimeout(() => {
+        handleCloseResultModal(true);
+      }, 1600);
+    }
+
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+    };
+  }, [showResultModal, resultType, resultAnim, handleCloseResultModal]);
+
+  const openResultModal = (type, message) => {
+    setResultType(type);
+    setResultMessage(message);
+    setShowResultModal(true);
+  };
 
   const handleLogin = async () => {
-    if (!username.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập username");
+    if (!identifier.trim()) {
+      openResultModal("error", "Vui lòng nhập username, số điện thoại hoặc email");
       return;
     }
     if (!password) {
-      Alert.alert("Lỗi", "Vui lòng nhập mật khẩu");
+      openResultModal("error", "Vui lòng nhập mật khẩu");
       return;
     }
 
     setLoading(true);
 
-    const result = await login(username, password);
+    const result = await login(identifier, password);
 
     setLoading(false);
 
     if (result.success) {
-      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+      openResultModal("success", "Đăng nhập thành công, đang chuyển trang...");
     } else {
-      Alert.alert("Đăng nhập thất bại", result.message);
+      openResultModal("error", result.message || "Đăng nhập thất bại");
     }
   };
 
@@ -83,7 +130,7 @@ const LoginScreen = ({ navigation }) => {
           <View style={styles.formCard}>
             <Text style={styles.title}>Đăng nhập tài khoản</Text>
 
-            <Text style={styles.fieldLabel}>Username</Text>
+            <Text style={styles.fieldLabel}>Username / SĐT / Email</Text>
             <View
               style={[
                 styles.inputWrap,
@@ -93,10 +140,10 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.inputPrefix}>@</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Nhập username"
+                placeholder="Nhập username, số điện thoại hoặc email"
                 placeholderTextColor="#a9a9a9"
-                value={username}
-                onChangeText={setUsername}
+                value={identifier}
+                onChangeText={setIdentifier}
                 onFocus={() => setFocusedField("username")}
                 onBlur={() => setFocusedField("")}
                 autoCapitalize="none"
@@ -166,6 +213,77 @@ const LoginScreen = ({ navigation }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showResultModal}
+        transparent
+        animationType="none"
+        onRequestClose={() => handleCloseResultModal(false)}
+      >
+        <Animated.View
+          style={[
+            styles.modalOverlay,
+            {
+              opacity: resultAnim,
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.modalCard,
+              {
+                opacity: resultAnim,
+                transform: [
+                  {
+                    scale: resultAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.88, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalBadge,
+                resultType === "success"
+                  ? styles.modalBadgeSuccess
+                  : styles.modalBadgeError,
+              ]}
+            >
+              <Text style={styles.modalBadgeIcon}>
+                {resultType === "success" ? "✓" : "!"}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.modalTitle,
+                resultType === "success"
+                  ? styles.modalTitleSuccess
+                  : styles.modalTitleError,
+              ]}
+            >
+              {resultType === "success" ? "Đăng nhập thành công" : "Đăng nhập thất bại"}
+            </Text>
+            <Text style={styles.modalMessage}>{resultMessage}</Text>
+
+            <TouchableOpacity
+              style={[
+                styles.modalButton,
+                resultType === "success"
+                  ? styles.modalButtonSuccess
+                  : styles.modalButtonError,
+              ]}
+              onPress={() => handleCloseResultModal(resultType === "success")}
+            >
+              <Text style={styles.modalButtonText}>
+                {resultType === "success" ? "Vào trang chủ" : "Đóng"}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -345,5 +463,69 @@ const styles = StyleSheet.create({
   bottomText: {
     color: "#9CA3AF",
     fontSize: 12,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.38)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 18,
+    alignItems: "center",
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalBadge: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  modalBadgeSuccess: { backgroundColor: "#FCEAEA" },
+  modalBadgeError: { backgroundColor: "#FDECEC" },
+  modalBadgeIcon: {
+    fontSize: 30,
+    color: "#E53935",
+    fontWeight: "900",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  modalTitleSuccess: { color: "#E53935" },
+  modalTitleError: { color: "#B91C1C" },
+  modalMessage: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#4B5563",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  modalButton: {
+    width: "100%",
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  modalButtonSuccess: { backgroundColor: "#E53935" },
+  modalButtonError: { backgroundColor: "#EF4444" },
+  modalButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
   },
 });

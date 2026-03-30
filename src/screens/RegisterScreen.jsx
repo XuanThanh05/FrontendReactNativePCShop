@@ -17,6 +17,34 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 
+const InputField = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  secureTextEntry,
+  hint,
+  rightElement,
+}) => (
+  <View style={styles.fieldWrap}>
+    <View style={styles.inputWrap}>
+      <TextInput
+        style={styles.input}
+        placeholder={placeholder || label}
+        placeholderTextColor="#bbb"
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType || "default"}
+        secureTextEntry={secureTextEntry || false}
+        autoCapitalize="none"
+      />
+      {rightElement}
+    </View>
+    {hint && <Text style={styles.inputHint}>{hint}</Text>}
+  </View>
+);
+
 const RegisterScreen = ({ navigation }) => {
   const { register } = useAuth();
   const keyboardOffset = Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0;
@@ -109,34 +137,6 @@ const RegisterScreen = ({ navigation }) => {
       Alert.alert("Đăng ký thất bại", result.message);
     }
   };
-
-  const InputField = ({
-    label,
-    value,
-    onChangeText,
-    placeholder,
-    keyboardType,
-    secureTextEntry,
-    hint,
-    rightElement,
-  }) => (
-    <View style={styles.fieldWrap}>
-      <View style={styles.inputWrap}>
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder || label}
-          placeholderTextColor="#bbb"
-          value={value}
-          onChangeText={onChangeText}
-          keyboardType={keyboardType || "default"}
-          secureTextEntry={secureTextEntry || false}
-          autoCapitalize="none"
-        />
-        {rightElement}
-      </View>
-      {hint && <Text style={styles.inputHint}>{hint}</Text>}
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.safe}>
