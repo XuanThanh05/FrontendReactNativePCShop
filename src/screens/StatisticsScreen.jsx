@@ -367,8 +367,9 @@ export default function StatisticsScreen({ navigation }) {
         const warehouse = warehouseRes.data || [];
         setWarehouseData(warehouse);
         
+        // ✅ Tính cả những sản phẩm hết hàng (stockQuantity = 0) và tồn kho thấp (< 10)
         const lowStock = warehouse.filter(
-          item => item.stockQuantity > 0 && item.stockQuantity < 10
+          item => (item.stockQuantity || 0) < 10
         ).length;
         setLowStockCount(lowStock);
 
