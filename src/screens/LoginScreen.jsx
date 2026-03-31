@@ -14,10 +14,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
+import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 
 const LoginScreen = ({ navigation }) => {
-  const { login } = useAuth();
+  const { login, loginGoogle } = useAuth();
   const keyboardOffset = Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0;
+
+  useEffect(() => {
+    try {
+      GoogleSignin.configure({
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "983126615522-kl5tt58e6q1h4ooudjn3cm58rttrrk7t.apps.googleusercontent.com",
+        scopes: ['profile', 'email'],
+      });
+    } catch (error) {
+      console.log("GoogleSignin.configure error:", error);
+    }
+  }, []);
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -91,6 +103,41 @@ const LoginScreen = ({ navigation }) => {
       openResultModal("success", "Đăng nhập thành công, đang chuyển trang...");
     } else {
       openResultModal("error", result.message || "Đăng nhập thất bại");
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.data?.idToken || userInfo.idToken;
+
+      if (!idToken) {
+        throw new Error('Không lấy được idToken từ Google');
+      }
+
+      const result = await loginGoogle(idToken);
+      
+      setLoading(false);
+      
+      if (result.success) {
+        openResultModal("success", "Đăng nhập Google thành công...");
+      } else {
+        openResultModal("error", result.message || "Đăng nhập Google thất bại");
+      }
+    } catch (error) {
+      setLoading(false);
+      console.log('Google Signin Error:', error.message);
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        openResultModal("error", "Đã hủy đăng nhập Google");
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        openResultModal("error", "Đang xử lý đăng nhập...");
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        openResultModal("error", "Google Play Services không khả dụng");
+      } else {
+        openResultModal("error", error.message || "Đã xảy ra lỗi khi đăng nhập Google");
+      }
     }
   };
 
@@ -184,6 +231,16 @@ const LoginScreen = ({ navigation }) => {
             >
               <Text style={styles.submitText}>
                 {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.googleBtn, loading && styles.submitBtnDisabled]} 
+              onPress={handleGoogleLogin}
+              disabled={loading}
+            >
+              <Text style={styles.googleBtnText}>
+                 Đăng nhập bằng Google
               </Text>
             </TouchableOpacity>
 
@@ -420,6 +477,26 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "800",
+  },
+  googleBtn: {
+    backgroundColor: "#ffffff",
+    height: 50,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  googleBtnText: {
+    color: "#1f2937",
+    fontSize: 16,
+    fontWeight: "700",
   },
 
   switchRow: {

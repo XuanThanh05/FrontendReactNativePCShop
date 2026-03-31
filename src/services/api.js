@@ -5,11 +5,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // Đây là Backend, tuỳ thuộc vào cách mở app expo mà chỉnh baseURL cho phù hợp:
 // Android Emulator mặc định chơi → 10.0.2.2
 // iOS Simulator → localhost
-// Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10) 
+// Điện thoại vật lí thì sử dụng IP máy tính (localhost không nhận) (vd: 192.168.1.10)
 // (Dùng ipconfig trên cmd hoặc trực tiếp xem wifi settings)
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  process.env.NATIVE_API_BASE_URL ||
+  "http://192.168.100.5:8080/api";
 
 const API = axios.create({
-  baseURL: "http://192.168.76.151:8080/api",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -65,6 +69,10 @@ export const loginApi = (data) => {
     username: loginIdentifier,
     password: data?.password || "",
   });
+};
+
+export const loginGoogleApi = (idToken) => {
+  return API.post("/auth/login-google", { idToken });
 };
 
 export const registerApi = (data) => {

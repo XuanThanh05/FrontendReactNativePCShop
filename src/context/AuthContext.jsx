@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useState } from "react";
-import { getAuthMe, loginApi, registerApi } from "../services/api";
+import { getAuthMe, loginApi, loginGoogleApi, registerApi } from "../services/api";
 
 const AuthContext = createContext();
 
@@ -157,6 +157,40 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // 🔐 GOOGLE LOGIN REAL API
+  const loginGoogle = async (idToken) => {
+    try {
+      const res = await loginGoogleApi(idToken);
+      const data = res.data;
+
+      // Normalize role: convert "ROLE_ADMIN" -> "admin", "ROLE_CUSTOMER" -> "customer"
+      let normalizedRole = data.role.toLowerCase().replace("role_", "");
+
+      const user = {
+        username: data.username,
+        role: normalizedRole,
+        customerId: data.customerId,
+        token: data.accessToken,
+        fullName: data.fullName || data.username || "",
+        phone: data.phone || "",
+        email: data.email || "",
+        address: data.address || "",
+      };
+
+      setCurrentUser(user);
+      await AsyncStorage.setItem("currentUser", JSON.stringify(user));
+
+      return { success: true, user };
+    } catch (err) {
+      console.log("Google Login error:", err.response?.data || err.message);
+
+      return {
+        success: false,
+        message: err?.response?.data?.message || err.message || "Đăng nhập Google thất bại",
+      };
+    }
+  };
+
   const register = async ({ username, email, password, fullName, phone, address }) => {
     try {
       const payload = {
@@ -214,7 +248,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ currentUser, isLoggedIn, login, register, logout, loading }}
+      value={{ currentUser, isLoggedIn, login, loginGoogle, register, logout, loading }}
     >
       {!loading && children}
     </AuthContext.Provider>
