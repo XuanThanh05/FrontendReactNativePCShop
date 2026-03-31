@@ -196,7 +196,7 @@ const CategoryScreen = ({ navigation, route }) => {
     : filteredProducts;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#EB2D2D" />
 
       <View style={styles.header}>
@@ -404,7 +404,7 @@ const CategoryScreen = ({ navigation, route }) => {
 export default CategoryScreen;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#ECECEC" },
+  safeArea: { flex: 1, backgroundColor: "#fff" },
 
   header: {
     flexDirection: "row",

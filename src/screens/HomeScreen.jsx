@@ -372,7 +372,7 @@ const HomeScreen = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={["top"]} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#E53935" />
 
       {/* Header */}
@@ -433,7 +433,7 @@ const HomeScreen = ({ navigation }) => {
         ListHeaderComponent={renderHeader()}
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: 0 }}
       />
 
       <ComparisonDock navigation={navigation} />
@@ -442,7 +442,7 @@ const HomeScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f5f5f5" },
+  safe: { flex: 1, backgroundColor: "#fff" },
   header: {
     flexDirection: "row",
     alignItems: "center",

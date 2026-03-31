@@ -65,7 +65,7 @@ const CartScreen = ({ navigation }) => {
   // ── Giỏ hàng trống ───────────────────────────────────────────────
   if (cartItems.length === 0) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={["top"]} style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={72} color="#ccc" style={{ marginBottom: 16 }} />
@@ -149,7 +149,7 @@ export default CartScreen;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#fff",
   },
 
   // Header

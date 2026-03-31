@@ -45,7 +45,7 @@ const AccountScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={["top"]} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#E53935" />
 
       {/* ── Header ─────────────────────────────────────────── */}
@@ -180,7 +180,7 @@ const AccountScreen = ({ navigation }) => {
 export default AccountScreen;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f5f5f5" },
+  safe: { flex: 1, backgroundColor: "#fff" },
 
   // Header
   header: {
